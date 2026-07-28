@@ -1,0 +1,7 @@
+
+.devcontainer/
+.vscode/
+.zed/
+build/
+install/
+log/
