@@ -1,0 +1,3 @@
+[submodule "src/my_node/src/sensor-flow"]
+	path = src/my_node/src/sensor-flow
+	url = https://github.com/kei185/sensor-flow.git

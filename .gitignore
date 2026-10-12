@@ -6,3 +6,5 @@ build/
 install/
 log/
 frames*
+
+src/my_node/src/my-plot/.git

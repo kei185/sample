@@ -1,4 +1,4 @@
-.PHONY: build init
+.PHONY: build init clean
 
 init:
 	colcon build --symlink-install
@@ -6,3 +6,6 @@ init:
 
 build:
 	colcon build
+
+clean:
+	rm -rf build

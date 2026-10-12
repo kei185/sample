@@ -23,9 +23,26 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(nav2_msgs REQUIRED)
 
 file(GLOB SRC src/*.cpp)
-add_executable(my_node ${SRC})
+file(GLOB LIB
+    src/sensor-flow/src/manager.cpp
+    src/sensor-flow/src/application.cpp
+    src/sensor-flow/src/worker/*.cpp
+    src/sensor-flow/src/utility/*.cpp
+    src/sensor-flow/src/core/**.cpp
+    )
+add_executable(my_node ${SRC} ${LIB})
+
+target_include_directories(
+    my_node
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor-flow/src
+)
 
 target_link_libraries(
     my_node
@@ -33,7 +50,10 @@ target_link_libraries(
     rclcpp::rclcpp
     std_msgs::std_msgs
     sensor_msgs::sensor_msgs
-    )
+    tf2::tf2
+    rclcpp_action::rclcpp_action
+    nav2_msgs::nav2_msgs
+)
 
 
 install(
