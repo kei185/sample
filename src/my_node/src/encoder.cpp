@@ -14,8 +14,6 @@ Encoder::Encoder(xqueue::Queue<frame::Encoder>& parsedQueue)
         this->publisher =
                 this->create_publisher<sensor_msgs::msg::JointState>("joint_states",
                                                                      rclcpp::SensorDataQoS());
-        this->timer =
-                this->create_wall_timer(device::ENCODER_INTERVAL, [this] { this->process(); });
 }
 
 void Encoder::run(std::stop_token st)
@@ -32,9 +30,6 @@ void Encoder::process()
 {
         if (this->parsedQueue.empty())
                 return;
-
-        // TODO: parsedQueueから左右の回転量を取得してpublisherへ渡す。
-        // 出力内容を決めるまではqueueから取り出さず、データを残しておく。
 }
 
 } // namespace encoder
