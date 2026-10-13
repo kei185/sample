@@ -28,20 +28,14 @@ find_package(rclcpp_action REQUIRED)
 find_package(nav2_msgs REQUIRED)
 
 file(GLOB SRC src/*.cpp)
-file(GLOB LIB
-    src/sensor-flow/src/manager.cpp
-    src/sensor-flow/src/application.cpp
-    src/sensor-flow/src/worker/*.cpp
-    src/sensor-flow/src/utility/*.cpp
-    src/sensor-flow/src/core/**.cpp
-    )
+
 add_executable(my_node ${SRC} ${LIB})
 
 target_include_directories(
     my_node
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor-flow/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor-flow/install/include
 )
 
 target_link_libraries(
@@ -53,6 +47,7 @@ target_link_libraries(
     tf2::tf2
     rclcpp_action::rclcpp_action
     nav2_msgs::nav2_msgs
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor-flow/install/lib/libsensor-flow.so
 )
 
 
