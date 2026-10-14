@@ -7,6 +7,7 @@
 
 #include "core/frame.hpp"
 #include "core/xqueue.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "worker/processor.hpp"
 
 namespace encoder
@@ -15,14 +16,14 @@ namespace encoder
 struct Encoder : public processor::Processor, public rclcpp::Node
 {
 
-        xqueue::Queue<frame::Encoder>&                             parsedQueue;
-        rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher;
+        xqueue::Queue<frame::Encoder>&                        parsedQueue;
+        rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr publisher;
 
         // queueの所有者は、ノードより長く生存すること。
         explicit Encoder(xqueue::Queue<frame::Encoder>& parsedQueue);
 
-        void run(std::stop_token) override;
-        void process();
+        void                    run(std::stop_token) override;
+        nav_msgs::msg::Odometry transform(const frame::Encoder&);
 };
 
 } // namespace encoder

@@ -1,7 +1,9 @@
 #include "encoder.hpp"
+#include "core/frame.hpp"
 #include "device.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 
-#include <rclcpp/executors/single_threaded_executor.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
 
@@ -12,24 +14,23 @@ Encoder::Encoder(xqueue::Queue<frame::Encoder>& parsedQueue)
     : Node("encoder"), parsedQueue(parsedQueue)
 {
         this->publisher =
-                this->create_publisher<sensor_msgs::msg::JointState>("joint_states",
-                                                                     rclcpp::SensorDataQoS());
+                this->create_publisher<nav_msgs::msg::Odometry>("odom", rclcpp::SensorDataQoS());
 }
 
 void Encoder::run(std::stop_token st)
 {
-        rclcpp::executors::SingleThreadedExecutor executor;
-        executor.add_node(this->get_node_base_interface());
-
-        // Workerのunique_ptrでも使える。停止要求を確認しながらtimerを動かす。
-        while (rclcpp::ok() && !st.stop_requested())
-                executor.spin_once(device::EXECUTOR_TIMEOUT);
+        while (this->parsedQueue.waitData(st)) {
+                auto data = this->parsedQueue.pop();
+                (void)data;
+        }
 }
 
-void Encoder::process()
+nav_msgs::msg::Odometry Encoder::transform(const frame::Encoder& encoder)
 {
-        if (this->parsedQueue.empty())
-                return;
+        (void)encoder;
+        auto msg = nav_msgs::msg::Odometry();
+
+        return msg;
 }
 
 } // namespace encoder

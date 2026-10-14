@@ -1,9 +1,11 @@
 #include "imu.hpp"
-#include "device.hpp"
+#include "core/frame.hpp"
 
+#include <sensor_msgs/msg/imu.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
+#include <stop_token>
 
 namespace imu
 {
@@ -12,26 +14,23 @@ Imu::Imu(xqueue::Queue<frame::Imu>& parsedQueue) : Node("imu"), parsedQueue(pars
 {
         this->publisher =
                 this->create_publisher<sensor_msgs::msg::Imu>("imu", rclcpp::SensorDataQoS());
-        this->timer = this->create_wall_timer(device::IMU_INTERVAL, [this] { this->process(); });
 }
 
 void Imu::run(std::stop_token st)
 {
-        rclcpp::executors::SingleThreadedExecutor executor;
-        executor.add_node(this->get_node_base_interface());
-
-        // Workerのunique_ptrでも使える。停止要求を確認しながらtimerを動かす。
-        while (rclcpp::ok() && !st.stop_requested())
-                executor.spin_once(device::EXECUTOR_TIMEOUT);
+        while (this->parsedQueue.waitData(st)) {
+                auto data = this->parsedQueue.pop();
+                auto msg  = transform(data);
+                this->publisher->publish(msg);
+        }
 }
 
-void Imu::process()
+sensor_msgs::msg::Imu Imu::transform(const frame::Imu& imu)
 {
-        if (this->parsedQueue.empty())
-                return;
+        (void)imu;
+        auto msg = sensor_msgs::msg::Imu();
 
-        // TODO: parsedQueueから値を取得し、ROSの単位に変換してpublisherへ渡す。
-        // 変換を実装するまではqueueから取り出さず、データを残しておく。
+        return msg;
 }
 
 } // namespace imu

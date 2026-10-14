@@ -26,6 +26,8 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 file(GLOB SRC src/*.cpp)
 
@@ -47,6 +49,8 @@ target_link_libraries(
     tf2::tf2
     rclcpp_action::rclcpp_action
     nav2_msgs::nav2_msgs
+    nav_msgs::nav_msgs
+    geometry_msgs::geometry_msgs
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor-flow/install/lib/libsensor-flow.so
 )
 
