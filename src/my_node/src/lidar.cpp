@@ -1,5 +1,5 @@
 #include "lidar.hpp"
-#include "device.hpp"
+#include "sensor_msgs/msg/laser_scan.hpp"
 
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/qos.hpp>
@@ -16,15 +16,24 @@ Lidar::Lidar(xqueue::Queue<frame::LidarPoint>& parsedQueue)
                                                                     rclcpp::SensorDataQoS());
 }
 
-void Lidar::run(std::stop_token st) { (void)st; }
-
-void Lidar::process()
+void Lidar::run(std::stop_token st)
 {
-        if (this->parsedQueue.empty())
-                return;
+        while (st.stop_requested()) {
+                if (!this->parsedQueue.empty())
+                        continue;
 
-        // TODO: parsedQueueから点を取得し、LaserScanにまとめてpublisherへ渡す。
-        // 変換を実装するまではqueueから取り出さず、データを残しておく。
+                auto data = this->parsedQueue.pop();
+                auto msg  = transform(data);
+                this->publisher->publish(msg);
+        }
+}
+
+sensor_msgs::msg::LaserScan transform(const frame::LidarPoint& lidar)
+{
+        (void)lidar;
+        auto msg = sensor_msgs::msg::LaserScan();
+
+        return msg;
 }
 
 } // namespace lidar

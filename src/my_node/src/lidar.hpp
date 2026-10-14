@@ -14,16 +14,14 @@ namespace lidar
 
 struct Lidar : public processor::Processor, public rclcpp::Node
 {
-        // queueの所有者は、ノードより長く生存すること。
-        explicit Lidar(xqueue::Queue<frame::LidarPoint>& parsedQueue);
-        void run(std::stop_token) override;
 
-      private:
         xqueue::Queue<frame::LidarPoint>&                         parsedQueue;
         rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr publisher;
-        rclcpp::TimerBase::SharedPtr                              timer;
 
-        void process();
+        // queueの所有者は、ノードより長く生存すること。
+        explicit Lidar(xqueue::Queue<frame::LidarPoint>& parsedQueue);
+        void                        run(std::stop_token) override;
+        sensor_msgs::msg::LaserScan transform(const frame::LidarPoint&);
 };
 
 } // namespace lidar

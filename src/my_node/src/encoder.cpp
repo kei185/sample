@@ -21,7 +21,8 @@ void Encoder::run(std::stop_token st)
 {
         while (this->parsedQueue.waitData(st)) {
                 auto data = this->parsedQueue.pop();
-                (void)data;
+                auto msg  = transform(data);
+                this->publisher->publish(msg);
         }
 }
 
