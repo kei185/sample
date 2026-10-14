@@ -39,6 +39,7 @@ class WFD
         std::queue<Coordinate>               m;
         std::queue<Coordinate>               f;
 
+        bool                    isInside(const Coordinate& coord) const;
         bool                    isMarkedAs(int flag, const Coordinate& coord) const;
         void                    markAs(int flag, const Coordinate& coord);
         void                    markAs(int flag, const std::vector<Coordinate>& coords);
