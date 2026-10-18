@@ -1,60 +1,44 @@
 import os
 
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-
-# from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import Command, LaunchConfiguration
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    pkg_share = get_package_share_directory("my_node")
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
-    # for tf static
-    robot_state_publisher = Node(
-        package="robot_state_publisher",
-        executable="robot_state_publisher",
-        parameters=[
-            {"robot_description": Command(["xacro ", LaunchConfiguration("model")])},
-        ],
-    )
-
-    # joint_state_publisher = Node(
-    #     package="joint_state_publisher",
-    #     executable="joint_state_publisher",
-    #     name="joint_state_publisher",
-    #     parameters=[{"robot_description": Command(["xacro ", default_model_path])}],
-    # )
-    # joint_state_publisher_gui_node = Node(
-    #     package="joint_state_publisher_gui",
-    #     executable="joint_state_publisher_gui",
-    #     name="joint_state_publisher_gui",
-    #     condition=IfCondition(LaunchConfiguration("gui")),
-    # )
-
-    robot_localization = Node(
-        package="robot_localization",
-        executable="ekf_node",
-        name="ekf_filter_node",
-        output="screen",
-        parameters=[
-            os.path.join(pkg_share, "config/ekf.yaml"),
-        ],
-    )
-
-    slam_toolbox = Node(
-        package="slam_toolbox",
-        executable="async_slam_toolbox_node",
-        name="async_slam_toolbox_node",
-        output="screen",
-        parameters=[],
-    )
-
-    return LaunchDescription(
-        [
-            # joint_state_publisher,
-            # joint_state_publisher_gui_node,
-            robot_state_publisher,
-            robot_localization,
-            slam_toolbox,
-        ]
-    )
+    return LaunchDescription([
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_share, "launch", "display.launch.py")
+            ),
+            launch_arguments={"use_rviz": "false", "use_sim_time": use_sim_time}.items(),
+        ),
+        Node(
+            package="robot_localization",
+            executable="ekf_node",
+            name="ekf_filter_node",
+            output="screen",
+            parameters=[
+                os.path.join(pkg_share, "config", "ekf.yaml"),
+                {"use_sim_time": use_sim_time},
+            ],
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(
+                get_package_share_directory("slam_toolbox"),
+                "launch", "online_async_launch.py",
+            )),
+            launch_arguments={
+                "use_sim_time": use_sim_time,
+                "autostart": "true",
+                "use_lifecycle_manager": "false",
+            }.items(),
+        ),
+    ])

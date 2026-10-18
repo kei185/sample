@@ -1,0 +1,117 @@
+<?xml version="1.0"?>
+<robot name="sample" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:property name="base_length" value="0.20"/>
+  <xacro:property name="base_width" value="0.18"/>
+  <xacro:property name="base_height" value="0.22"/>
+  <xacro:property name="wheel_radius" value="0.021"/>
+  <xacro:property name="wheel_width" value="0.019"/>
+  <xacro:property name="wheel_separation" value="0.13"/>
+  <xacro:property name="axle_from_back" value="0.05"/>
+  <xacro:property name="body_x" value="${base_length / 2 - axle_from_back}"/>
+  <!-- DEVICE.mdの寸法はmに変換する。base_linkは左右車軸の中点、x前方・y左・z上。 -->
+
+  <xacro:arg name="imu_height" default="0.021"/>
+  <xacro:property name="caster_radius" value="0.01"/>
+  <!-- IMU高さは地面から車軸と同じ高さを仮定する。キャスター径も表示用の仮値。 -->
+
+  <material name="Cyan">
+    <color rgba="0 1 1 0.35"/>
+  </material>
+  <material name="Gray">
+    <color rgba="0.5 0.5 0.5 1"/>
+  </material>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="${body_x} 0 ${base_height / 2}"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height - 2 * wheel_radius}"/>
+      </geometry>
+      <material name="Cyan"/>
+    </visual>
+    <collision>
+      <origin xyz="${body_x} 0 ${base_height / 2}"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height - 2 * wheel_radius}"/>
+      </geometry>
+    </collision>
+  </link>
+  <!-- 筐体は車輪の上から全高22cmまでの外形を表す箱で近似する。 -->
+
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_footprint"/>
+    <origin xyz="0 0 ${-wheel_radius}"/>
+  </joint>
+
+  <xacro:macro name="wheel" params="prefix side">
+    <link name="${prefix}_link">
+      <visual>
+        <origin rpy="${pi / 2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="Gray"/>
+      </visual>
+      <collision>
+        <origin rpy="${pi / 2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${prefix}_link"/>
+      <origin xyz="0 ${side * wheel_separation / 2} 0"/>
+      <axis xyz="0 1 0"/>
+    </joint>
+  </xacro:macro>
+  <xacro:wheel prefix="drivewhl_l" side="1"/>
+  <xacro:wheel prefix="drivewhl_r" side="-1"/>
+
+  <link name="front_caster">
+    <visual>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+      <material name="Gray"/>
+    </visual>
+  </link>
+  <joint name="caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="front_caster"/>
+    <origin xyz="${0.15 - axle_from_back} 0 ${caster_radius - wheel_radius}"/>
+  </joint>
+
+  <link name="imu_link">
+    <visual>
+      <geometry>
+        <box size="0.02 0.02 0.005"/>
+      </geometry>
+      <material name="Gray"/>
+    </visual>
+  </link>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="${0.10 - axle_from_back} 0 ${float('$(arg imu_height)') - wheel_radius}"/>
+  </joint>
+
+  <link name="lidar_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.02" length="0.04"/>
+      </geometry>
+      <material name="Gray"/>
+    </visual>
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="${body_x} 0 ${0.20 - wheel_radius}"/>
+  </joint>
+  <!-- センサーの外観寸法は仮値。取り付け軸はbase_linkと同じ向きを仮定する。 -->
+</robot>
+<!-- Nav2 sam_bot_descriptionのURDFを実機寸法とTF表示向けに変更。出典・ライセンスはNOTICE.md。 -->
