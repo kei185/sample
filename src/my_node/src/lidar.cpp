@@ -1,9 +1,14 @@
 #include "lidar.hpp"
+#include "device.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
+
+#include <cmath>
+#include <cstdint>
+#include <limits>
 
 namespace lidar
 {
@@ -18,8 +23,8 @@ Lidar::Lidar(xqueue::Queue<frame::LidarPoint>& parsedQueue)
 
 void Lidar::run(std::stop_token st)
 {
-        while (st.stop_requested()) {
-                if (!this->parsedQueue.empty())
+        while (!st.stop_requested()) {
+                if (this->parsedQueue.empty())
                         continue;
 
                 auto data = this->parsedQueue.pop();
@@ -28,10 +33,36 @@ void Lidar::run(std::stop_token st)
         }
 }
 
-sensor_msgs::msg::LaserScan transform(const frame::LidarPoint& lidar)
+sensor_msgs::msg::LaserScan Lidar::transform(const frame::LidarPoint& lidar)
 {
-        (void)lidar;
+        using namespace device;
+
         auto msg = sensor_msgs::msg::LaserScan();
+
+        msg.header.stamp.sec     = static_cast<int32_t>(lidar.timestamp / 1000);
+        msg.header.stamp.nanosec = static_cast<uint32_t>((lidar.timestamp % 1000) * 1'000'000);
+        msg.header.frame_id      = LIDAR_FRAME_ID;
+        msg.range_min            = LIDAR_RANGE_MIN_M;
+        msg.range_max            = LIDAR_RANGE_MAX_M;
+
+        if (lidar.point.empty())
+                return msg;
+
+        // 終端角を基準にすれば、350度から10度の区間も連続した角度になる。
+        // clockwise to anti clockwise
+        msg.angle_min       = std::remainder(-lidar.angleEnd, 360.0) * RADIAN_PER_DEGREE;
+        msg.angle_increment = lidar.angleDiff * RADIAN_PER_DEGREE;
+        msg.angle_max       = msg.angle_min + msg.angle_increment * (lidar.point.size() - 1);
+
+        msg.ranges.reserve(lidar.point.size());
+
+        for (const double& point : lidar.point) {
+                const float distance = point * LIDAR_METERS_PER_MM;
+                msg.ranges.push_back(std::isfinite(distance) && distance >= msg.range_min &&
+                                                     distance <= msg.range_max
+                                             ? distance
+                                             : std::numeric_limits<float>::quiet_NaN());
+        }
 
         return msg;
 }

@@ -24,6 +24,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -47,6 +48,7 @@ target_link_libraries(
     std_msgs::std_msgs
     sensor_msgs::sensor_msgs
     tf2::tf2
+    tf2_ros::tf2_ros
     rclcpp_action::rclcpp_action
     nav2_msgs::nav2_msgs
     nav_msgs::nav_msgs

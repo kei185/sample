@@ -1,11 +1,14 @@
 #include "encoder.hpp"
 #include "core/frame.hpp"
 #include "device.hpp"
+#include "utility/numecric.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
+
+#include <cstdint>
 
 namespace encoder
 {
@@ -28,8 +31,23 @@ void Encoder::run(std::stop_token st)
 
 nav_msgs::msg::Odometry Encoder::transform(const frame::Encoder& encoder)
 {
-        (void)encoder;
+        using namespace device;
+        // 入力は0.1秒間の回転量。車輪の円周と採取周波数を掛けてm/sへ直す。
+        // 負の回転量は後退として、そのまま符号を残す。
+        const double leftVelocity  = encoder.left * VELOCITY_PER_ROTATION;
+        const double rightVelocity = encoder.right * VELOCITY_PER_ROTATION;
+
         auto msg = nav_msgs::msg::Odometry();
+
+        msg.header.stamp.sec     = static_cast<int32_t>(encoder.timestamp / 1000);
+        msg.header.stamp.nanosec = static_cast<uint32_t>((encoder.timestamp % 1000) * 1'000'000);
+        msg.header.frame_id      = ODOM_FRAME_ID;
+        msg.child_frame_id       = BASE_FRAME_ID;
+
+        // 位置・姿勢の積算は行わず、EKFへ渡す車体座標系の速度だけを設定する。
+        msg.pose.pose.orientation.w = 1.0;
+        msg.twist.twist.linear.x    = translation(leftVelocity, rightVelocity);
+        msg.twist.twist.angular.z   = rotation(leftVelocity, rightVelocity, WHEEL_SEPARATION);
 
         return msg;
 }

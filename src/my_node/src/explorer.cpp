@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <utility>
 
@@ -19,6 +20,57 @@ namespace explorer
 #define FRONTIER_CLOSE 0b1000
 
 WFD::WFD(nav_msgs::msg::OccupancyGrid grid) : grid(std::move(grid)) {}
+
+const std::vector<FrontierGroup>& WFD::getFrontierGroups() const { return frontierGroup; }
+
+Coordinate WFD::getRepresentative(const std::vector<Coordinate>& frontiers) const
+{
+        double centroidX = 0.0;
+        double centroidY = 0.0;
+        for (const auto& frontier : frontiers) {
+                centroidX += frontier.x;
+                centroidY += frontier.y;
+        }
+        centroidX /= frontiers.size();
+        centroidY /= frontiers.size();
+
+        Coordinate representative         = frontiers.front();
+        double     nearestDistanceSquared = std::numeric_limits<double>::infinity();
+        for (const auto& frontier : frontiers) {
+                const double dx              = frontier.x - centroidX;
+                const double dy              = frontier.y - centroidY;
+                const double distanceSquared = dx * dx + dy * dy;
+                if (distanceSquared < nearestDistanceSquared) {
+                        nearestDistanceSquared = distanceSquared;
+                        representative         = frontier;
+                }
+        }
+        return representative;
+}
+
+std::optional<Coordinate>
+WFD::getNearestRepresentative(const geometry_msgs::msg::Pose& currentPose) const
+{
+        if (frontierGroup.empty())
+                return std::nullopt;
+
+        const auto current = toCoordinate(currentPose.position);
+        if (!isInside(current))
+                return std::nullopt;
+
+        std::optional<Coordinate> nearest;
+        auto                      nearestDistanceSquared = std::numeric_limits<int64_t>::max();
+        for (const auto& group : frontierGroup) {
+                const auto dx = static_cast<int64_t>(group.representative.x) - current.x;
+                const auto dy = static_cast<int64_t>(group.representative.y) - current.y;
+                const auto distanceSquared = dx * dx + dy * dy;
+                if (distanceSquared < nearestDistanceSquared) {
+                        nearestDistanceSquared = distanceSquared;
+                        nearest                = group.representative;
+                }
+        }
+        return nearest;
+}
 
 bool WFD::isInside(const Coordinate& coord) const
 {
@@ -112,7 +164,7 @@ std::vector<Coordinate> WFD::getAdjacent(const Coordinate& coord) const
         return adjacent;
 }
 
-void WFD::run(const geometry_msgs::msg::Pose& currentPose)
+std::expected<void, Error> WFD::run(const geometry_msgs::msg::Pose& currentPose)
 {
         markList      = {};
         m             = {};
@@ -126,15 +178,15 @@ void WFD::run(const geometry_msgs::msg::Pose& currentPose)
             grid.info.height > static_cast<unsigned>(std::numeric_limits<int>::max()) ||
             !std::isfinite(grid.info.resolution) || grid.info.resolution <= 0.0f ||
             grid.data.size() != static_cast<size_t>(grid.info.width) * grid.info.height)
-                return;
+                return std::unexpected(Error::INVALID_GRID);
 
         auto currentCoordinate = toCoordinate(currentPose.position);
         if (!isInside(currentCoordinate))
-                return;
+                return std::unexpected(Error::INVALID_POSITION);
         const size_t startIndex =
                 static_cast<size_t>(currentCoordinate.y) * grid.info.width + currentCoordinate.x;
         if (grid.data[startIndex] != 0)
-                return;
+                return std::unexpected(Error::START_CELL_NOT_FREE);
 
         markList.assign(grid.info.width,
                         std::vector<Mark>(grid.info.height,
@@ -182,7 +234,11 @@ void WFD::run(const geometry_msgs::msg::Pose& currentPose)
                                 markAs(FRONTIER_CLOSE, q);
                         }
 
-                        frontierGroup.push_back(newFrontier);
+                        if (!newFrontier.empty())
+                                frontierGroup.push_back({
+                                        .frontiers      = newFrontier,
+                                        .representative = getRepresentative(newFrontier),
+                                });
                         markAs(MAP_CLOSE, newFrontier);
                 }
 
@@ -198,6 +254,21 @@ void WFD::run(const geometry_msgs::msg::Pose& currentPose)
                 }
 
                 markAs(MAP_CLOSE, p);
+        }
+        return {};
+}
+
+const char* toString(Error error)
+{
+        switch (error) {
+                case Error::INVALID_GRID:
+                        return "INVALID_GRID";
+                case Error::INVALID_POSITION:
+                        return "INVALID_POSITION";
+                case Error::START_CELL_NOT_FREE:
+                        return "START_CELL_NOT_FREE";
+                default:
+                        return "UNKNOWN";
         }
 }
 
