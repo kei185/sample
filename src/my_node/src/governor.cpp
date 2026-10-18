@@ -141,6 +141,9 @@ uint8_t Governor::sendGoal(nav2_msgs::action::NavigateToPose::Goal goal, std::st
                 std::this_thread::sleep_for(100ms);
         }
 
+        if (!rclcpp::ok() || st.stop_requested())
+                return action_msgs::msg::GoalStatus::STATUS_UNKNOWN;
+
         const auto handle = future.get();
         if (handle)
                 return handle->get_status();
