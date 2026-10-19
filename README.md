@@ -4,7 +4,7 @@
 
 | マシン | パッケージ | 起動するもの |
 | --- | --- | --- |
-| 実機PC | `my_node` | シリアル入出力、センサー配信、Commander、Governor、モデル・TF配信、EKF、SLAM |
+| 実機PC | `my_node` | シリアル入出力、センサー配信、Commander、Governor、モデル・TF配信、EKF、SLAM、Nav2 |
 | 可視化PC | `my_visualization` | RVizによるモデル・地図・LiDAR・推定軌跡の表示 |
 
 実機PCが`robot_description`、`tf`、`tf_static`、`map`、`scan`、`odometry/filtered`を配信する。
@@ -33,22 +33,36 @@ export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
 rosdep install --from-paths src/my_node --ignore-src -r -y
 colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
 source install/setup.bash
-ros2 launch my_node my_node.launch.py
+ros2 launch my_node my_node.launch.py serial_device:=/dev/ttyACM0
 ```
 
-このlaunchは、モデル・TF配信、EKF、SLAMを起動する。
-EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
-SLAMは`scan`を購読し、`map`と`map -> odom`を配信する。Nav2自体の起動は含まない。
+このlaunchは、C++アプリのシリアル入出力とセンサー配信、モデル・TF配信、EKF、SLAM、Nav2をまとめて起動する。
+シリアル接続先は`serial_device`で指定する。既存プロトコルのENTER待ちにはlaunchが改行を送り、ハンドシェイクと時刻同期の後に自動でスキャンを開始する。
+C++アプリが終了すると、同じlaunchのほかのノードも終了する。
+CommanderとGovernorのスレッドは引き続きC++アプリ内で管理する。
 
-実機PCの別端末でも上記のROS環境と通信設定を読み込み、センサー入力を起動する。
+EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
+SLAMは`scan`を購読し、`map`と`map -> odom`を配信する。
+Nav2は`navigation_launch.py`から起動するため、AMCLと地図サーバーは起動せず、SLAMの地図とTFを使う。
+Nav2の設定は`config/nav2_params.yaml`を使い、`nav2_params_file:=/path/to/params.yaml`で変更できる。
+
+速度指令の経路は次のようになる。指令の型はCommanderに合わせて`geometry_msgs/msg/Twist`を使う。
+
+```text
+Nav2 controller/behavior -> cmd_vel_nav -> velocity_smoother
+    -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> Commander
+```
+
+Nav2のOdometry入力は`odometry/filtered`へ合わせる。
+前後速度の下限は0にしているが、Commander::transformは引き続き未実装で既定値のMotorCommandを返す。
+実機走行用の速度変換と左右モーターの正転制約を満たす制御・回復動作の調整は未完了。
+
+C++アプリだけを端末から起動して調査する場合は、次の従来の起動方法も使える。
+統合launchと同時に実行するとシリアルポートとノードが重複するため、どちらか一方を起動する。
 
 ```bash
-source install/setup.bash
 ros2 run my_node my_node /dev/ttyACM0
 ```
-
-シリアル接続先は実機に合わせる。既存のプロトコルでENTER入力を待つため、C++アプリは端末から起動する。
-CommanderとGovernorのスレッドは引き続きC++アプリ内で管理する。
 
 ## 可視化PCでの起動
 
