@@ -25,6 +25,27 @@ export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
 マルチキャストによる探索が通るネットワークを使い、両PCの時計も同期する。
 設定はlaunchから書き換えず、各PCの環境変数で指定する。
 
+## Makefileからの起動・疎通確認
+
+ROS環境とビルド済みワークスペースの`install/setup.bash`を読み込んだ端末で実行する。
+上記の`ROS_DOMAIN_ID`と探索範囲も両PCで合わせる。
+
+| コマンド | 内容 |
+| --- | --- |
+| `make run` | 実機側一式を起動 |
+| `make display` | 可視化PCでRVizを起動 |
+| `make preview` | 可視化PCでモデル確認用のRVizを起動 |
+| `make model` | モデル・TF配信だけ起動 |
+| `make nodes` | 見えているノードを一覧表示 |
+| `make topics` | 見えているトピックと型を一覧表示 |
+| `make imu` / `make scan` / `make odom` | IMU・LiDAR・エンコーダの生Odometryを1件受信 |
+| `make ekf` | EKFのOdometryを1件受信 |
+| `make map` | 地図の寸法・解像度などを1件受信 |
+| `make tf` | `map -> base_link`の現在位置を継続表示 |
+
+センサー・地図の確認は受信すると終了する。受信待ちやTF表示を止める場合はCtrl+C。
+モデルだけを見る場合は実機側で`make model`、可視化側で`make preview`を使う。
+
 ## 実機PCでの起動
 
 既存のsensor-flowライブラリをビルド・インストールした状態で、実機パッケージだけをビルドする。
@@ -166,8 +187,8 @@ Nav2公式チュートリアルの[sam_bot_description](https://github.com/ros-n
 | base_link | imu_link | 0.05 | 0 | 0.144 |
 | base_link | lidar_link | 0.09 | 0 | 0.179 |
 
-IMUの地面からの高さは既定で0.165m。取り付け位置を変える場合は実機PCのlaunchに`imu_height:=0.18`のように指定する。
-その場合、`base_link -> imu_link`のzは`imu_height - 0.021`になる。
+IMUの地面からの高さは`src/my_node/urdf/sample.urdf.xacro`の`imu_height`で設定する。既定値は0.165m。
+`base_link -> imu_link`のzは`imu_height - 0.021`になる。
 車輪角度の配信は未実装のため、joint_state_publisherが角度0を配信し、モデル上の車輪は回転しない。
 筐体は車輪の上から全高までの箱で近似し、キャスター径とセンサーの外観寸法も表示用の仮値とする。
 IMU・LiDARの取り付け軸は`base_link`と同じ向きを仮定している。取り付け向きが異なる場合は実機に合わせて調整すること。
