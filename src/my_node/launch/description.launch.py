@@ -15,7 +15,6 @@ def generate_launch_description():
         Command([
             FindExecutable(name="xacro"),
             ' "', LaunchConfiguration("model"), '"',
-            " imu_height:=", LaunchConfiguration("imu_height"),
         ]),
         value_type=str,
     )
@@ -25,8 +24,6 @@ def generate_launch_description():
             "model",
             default_value=os.path.join(pkg_share, "urdf", "sample.urdf.xacro"),
         ),
-        DeclareLaunchArgument("imu_height", default_value="0.021"),
-        # 地面からIMUまでの高さ[m]。未計測なので初期値は車軸の高さ。
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         Node(
             package="robot_state_publisher",

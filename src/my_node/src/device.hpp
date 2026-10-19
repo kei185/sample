@@ -6,8 +6,9 @@ namespace device
 {
 
 constexpr double RADIAN_PER_DEGREE = std::numbers::pi / 180.0;
-// TODO 測る
-constexpr double MAX_VELOCITY = 0.5;
+constexpr double MIN_VELOCITY = 0.0;
+constexpr double MAX_VELOCITY = 0.3665;
+// 100% dutyで110cm / 3001ms ≈ 0.3665m/s。sensor-echoの測定記録より。
 constexpr double WHEEL_RADIUS = 0.021;
 constexpr double WHEEL_SEPARATION       = 0.13;
 // DEVICE.mdの車輪径42mm・左右中心間130mmをmへ変換する。

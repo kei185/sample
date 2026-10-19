@@ -10,9 +10,9 @@
   <xacro:property name="body_x" value="${base_length / 2 - axle_from_back}"/>
   <!-- DEVICE.mdの寸法はmに変換する。base_linkは左右車軸の中点、x前方・y左・z上。 -->
 
-  <xacro:arg name="imu_height" default="0.021"/>
+  <xacro:arg name="imu_height" default="0.165"/>
   <xacro:property name="caster_radius" value="0.01"/>
-  <!-- IMU高さは地面から車軸と同じ高さを仮定する。キャスター径も表示用の仮値。 -->
+  <!-- IMU高さはDEVICE.mdの地面から16.5cm。キャスター径は表示用の仮値。 -->
 
   <material name="Cyan">
     <color rgba="0 1 1 0.35"/>
@@ -110,7 +110,7 @@
   <joint name="lidar_joint" type="fixed">
     <parent link="base_link"/>
     <child link="lidar_link"/>
-    <origin xyz="${body_x} 0 ${0.20 - wheel_radius}"/>
+    <origin xyz="${0.14 - axle_from_back} 0 ${0.20 - wheel_radius}"/>
   </joint>
   <!-- センサーの外観寸法は仮値。取り付け軸はbase_linkと同じ向きを仮定する。 -->
 </robot>

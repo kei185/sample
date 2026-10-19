@@ -49,13 +49,61 @@ Nav2の設定は`config/nav2_params.yaml`を使い、`nav2_params_file:=/path/to
 速度指令の経路は次のようになる。指令の型はCommanderに合わせて`geometry_msgs/msg/Twist`を使う。
 
 ```text
-Nav2 controller/behavior -> cmd_vel_nav -> velocity_smoother
+Nav2 controller -> cmd_vel_nav -> velocity_smoother
     -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> Commander
 ```
 
 Nav2のOdometry入力は`odometry/filtered`へ合わせる。
-前後速度の下限は0にしているが、Commander::transformは引き続き未実装で既定値のMotorCommandを返す。
-実機走行用の速度変換と左右モーターの正転制約を満たす制御・回復動作の調整は未完了。
+Commander::transformはnumericのtoVelocityRatioで前進・旋回速度から左右の速度比を求め、0〜100%のPWM指令へ変換する。
+左右それぞれの負値は0、上限超えは100%へ収め、NaN・無限大の場合は両輪0%を返す。
+異常値はERROR、範囲外を収めた場合はWARNで、入力・速度上下限・車輪間隔・左右の比率・実際のPWM出力を記録する。
+速度比とPWMの関係は線形と仮定し、最大速度には以下の実測値を使う。
+
+速度に関係する設定値は次のとおり。Commanderはdevice.hppを参照し、Nav2はnav2_params.yamlを参照する。
+
+| 設定箇所 | 対象 | 下限 | 上限 | 単位 |
+| --- | --- | --- | --- | --- |
+| device.hppのMIN/MAX_VELOCITY | Commanderが換算する片輪の速度 | 0.0 | 0.3665 | m/s |
+| FollowPath.desired_linear_vel | RPPの前進速度 | 0.0 | 0.3665 | m/s |
+| velocity_smoother.min/max_velocityのx | 平滑化後の前後速度 | 0.0 | 0.3665 | m/s |
+| velocity_smoother.min/max_velocityのy | 平滑化後の横速度 | 0.0 | 0.0 | m/s |
+| velocity_smoother.min/max_velocityのz | 平滑化後の旋回角速度 | -2.0 | 2.0 | rad/s |
+| docking_server.controller.v_linear_min / v_linear_max | ドッキングの前後速度 | 0.15 | 0.15 | m/s |
+
+sensor-echoのローカルREADMEにある走行測定から、距離を経過時間で割って速度を求めた。
+
+| PWM duty | 移動距離 | 経過時間 | 平均速度 |
+| --- | --- | --- | --- |
+| 25% | 0.215 m | 3.001 s | 0.0716 m/s |
+| 50% | 0.51 m | 3.001 s | 0.1699 m/s |
+| 75% | 0.75 m | 3.001 s | 0.2499 m/s |
+| 100% | 1.10 m | 3.001 s | 0.3665 m/s |
+
+CommanderとNav2の前後速度上限は、100%時の`1.10 / 3.001 ≈ 0.3665 m/s`にそろえる。
+これは直進時の車体速度を、左右輪共通の換算基準として使う近似。測定点の補間は行わない。
+25%時の0.0716 m/sは測った最小の点で、動き出す最低速度を測ったものではない。停止指令のため下限は0のままにする。
+角速度は今回測定していないため、既存の設定値を使う。
+
+車輪は両方とも正転のみで、後退・その場旋回はできない。
+経路追従にはRegulated Pure Pursuit（RPP）を使い、`allow_reversing: false`と`use_rotate_to_heading: false`を指定する。
+速度上限は実測値の0.3665 m/s。カーブ・障害物付近・ゴール手前では減速する。
+減速時の走行速度下限0.05 m/sは調整用の初期値で、実測の始動速度ではない。停止指令は0 m/sを使う。
+
+先読み距離は20cmで固定し、曲率計算には`use_fixed_curvature_lookahead: true`を使う。
+`interpolate_curvature_after_goal: true`で、ゴール付近でも曲率用の点を20cm先まで補う。
+Pure Pursuitの曲率は`2 * y / L²`なので、先読み距離`L = 0.2m`では旋回半径が0.1m以上になる。
+これは両輪を正転・停止に保つための幾何上の下限、車輪間隔0.13mの半分の0.065mより大きい。
+`regulated_linear_scaling_min_radius: 0.3`は半径30cm未満で減速を始める値で、旋回半径そのものの下限ではない。
+velocity_smootherは`scale_velocities: true`で前進と旋回の速度変化を同じ比率に抑える。
+角速度の負値は右旋回、加速度・減速度の負値は減速にも使うため残す。
+
+Governorが使う`NavigateToPose`だけを有効にし、Nav2同梱の`navigate_w_replanning_time.xml`を使う。
+1秒ごとに経路を再計算してRPPで追従する。独自のBT XMLは置かない。
+後退・その場旋回・costmapクリア・待機による回復処理は行わず、経路計算や追従に失敗したらゴールを失敗として返す。
+ゴールは位置の許容範囲0.25mで判定し、その場旋回による向き合わせは行わない。
+`dock_backwards: false`は維持するが、後退が必要な`UndockRobot`は使わない。
+Commanderの各車輪0〜100%制限も最終段に残す。
+経路探索は既存のNavfnを使う。旋回半径を考慮した経路生成や、真後ろの経路からの切り返しは扱わない。実機での走行は未確認。
 
 C++アプリだけを端末から起動して調査する場合は、次の従来の起動方法も使える。
 統合launchと同時に実行するとシリアルポートとノードが重複するため、どちらか一方を起動する。
@@ -103,8 +151,9 @@ Nav2公式チュートリアルの[sam_bot_description](https://github.com/ros-n
 - 全長200mm、全幅180mm、全高220mm。`DEVICE.md`の`22ch`は22cmとして扱う。
 - 車輪は直径42mm・幅19mm、左右の中心間距離は130mm。
 - `base_link`は左右車軸の中点。前方が+x、左が+y、上が+z。
-- 車軸は後端から50mm、キャスターは後端から150mm、LiDARとIMUは後端から100mm。
-- LiDARの中心は地面から200mm。IMUの高さは未計測のため、初期値は車軸と同じ21mmとする。
+- 車軸は後端から50mm、キャスターは後端から150mm。
+- LiDARは左右中央・後端から140mm・地面から200mm。
+- IMUは左右中央・後端から100mm・地面から165mm。
 
 モデルのTFは次の配置になる。単位はm。
 
@@ -114,13 +163,14 @@ Nav2公式チュートリアルの[sam_bot_description](https://github.com/ros-n
 | base_link | drivewhl_l_link | 0 | 0.065 | 0 |
 | base_link | drivewhl_r_link | 0 | -0.065 | 0 |
 | base_link | front_caster | 0.10 | 0 | -0.011 |
-| base_link | imu_link | 0.05 | 0 | imu_height - 0.021 |
-| base_link | lidar_link | 0.05 | 0 | 0.179 |
+| base_link | imu_link | 0.05 | 0 | 0.144 |
+| base_link | lidar_link | 0.09 | 0 | 0.179 |
 
-IMUの高さは実機PCのlaunchに`imu_height:=0.08`のように地面からの実測値[m]を指定する。
+IMUの地面からの高さは既定で0.165m。取り付け位置を変える場合は実機PCのlaunchに`imu_height:=0.18`のように指定する。
+その場合、`base_link -> imu_link`のzは`imu_height - 0.021`になる。
 車輪角度の配信は未実装のため、joint_state_publisherが角度0を配信し、モデル上の車輪は回転しない。
 筐体は車輪の上から全高までの箱で近似し、キャスター径とセンサーの外観寸法も表示用の仮値とする。
-IMU・LiDARの取り付け軸は`base_link`と同じ向きを仮定している。実機に合わせて高さと向きを調整すること。
+IMU・LiDARの取り付け軸は`base_link`と同じ向きを仮定している。取り付け向きが異なる場合は実機に合わせて調整すること。
 質量・慣性とGazeboの制御プラグインは含めていないため、現状は表示とTF用のモデルになる。
 Nav2のglobal/local costmapの外形は車軸基準で前150mm・後50mm・左右90mmに合わせている。
 

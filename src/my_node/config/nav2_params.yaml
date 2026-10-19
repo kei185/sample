@@ -47,31 +47,22 @@ bt_navigator:
         default_server_timeout: 20
         wait_for_service_timeout: 1000
         action_server_result_timeout: 900.0
-        navigators: ["navigate_to_pose", "navigate_through_poses"]
+        navigators: ["navigate_to_pose"]
         navigate_to_pose:
             plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
-        navigate_through_poses:
-            plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
-        # 'default_nav_through_poses_bt_xml' and 'default_nav_to_pose_bt_xml' are use defaults:
-        # nav2_bt_navigator/navigate_to_pose_w_replanning_and_recovery.xml
-        # nav2_bt_navigator/navigate_through_poses_w_replanning_and_recovery.xml
-        # They can be set here or via a RewrittenYaml remap from a parent launch file to Nav2.
+        default_nav_to_pose_bt_xml: "$(find-pkg-share nav2_bt_navigator)/behavior_trees/navigate_w_replanning_time.xml"
+        # 標準BTで1秒ごとに経路を再計算する。後退・その場旋回・失敗時の回復処理は行わない。
 
         # plugin_lib_names is used to add custom BT plugins to the executor (vector of strings).
         # Built-in plugins are added automatically
         # plugin_lib_names: []
 
         error_code_name_prefixes:
-            - assisted_teleop
-            - backup
             - compute_path
             - dock_robot
-            - drive_on_heading
             - follow_path
-            - nav_thru_poses
             - nav_to_pose
             - route
-            - spin
             - undock_robot
             - wait
 
@@ -103,104 +94,33 @@ controller_server:
         #  stateful: True
         general_goal_checker:
             stateful: True
-            plugin: "nav2_controller::SimpleGoalChecker"
+            plugin: "nav2_controller::PositionGoalChecker"
             xy_goal_tolerance: 0.25
-            yaw_goal_tolerance: 0.25
+            # その場旋回できないため、到着時は位置だけを判定する。
         FollowPath:
-            plugin: "nav2_mppi_controller::MPPIController"
-            time_steps: 56
-            model_dt: 0.05
-            batch_size: 2000
-            ax_max: 3.0
-            ax_min: -3.0
-            ay_max: 3.0
-            az_max: 3.5
-            vx_std: 0.2
-            vy_std: 0.2
-            wz_std: 0.4
-            vx_max: 0.5
-            vx_min: 0.0
-            vy_max: 0.5
-            wz_max: 1.9
-            iteration_count: 1
-            prune_distance: 1.7
+            plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+            # 前進速度上限[m/s]。実測110cm / 3001msに合わせる。
+            desired_linear_vel: 0.3665
+            use_rotate_to_heading: false
+            allow_reversing: false
+            # 前方注視距離 固定
+            use_velocity_scaled_lookahead_dist: false
+            # 固定値
+            lookahead_dist: 0.2
+            use_fixed_curvature_lookahead: true
+            curvature_lookahead_dist: 0.2
+            # ゴールの先にも曲率用の先読み点を補い、距離20cm・旋回半径10cm以上を保つ。
+            interpolate_curvature_after_goal: true
+            # 半径30cm未満のカーブで減速する。旋回半径の下限を指定する値ではない。
+            regulated_linear_scaling_min_radius: 0.3
+            regulated_linear_scaling_min_speed: 0.05
+            min_approach_linear_velocity: 0.05
+            # 減速時の走行速度下限[m/s]と、ゴール手前の減速距離[m]。
+            approach_velocity_scaling_dist: 0.3
+            # 障害物まで30cm以内で減速する。inflation_radius以下にする。
+            cost_scaling_dist: 0.3
+            use_collision_detection: true
             transform_tolerance: 0.1
-            temperature: 0.3
-            gamma: 0.015
-            motion_model: "DiffDrive"
-            visualize: true
-            regenerate_noises: true
-            TrajectoryVisualizer:
-                trajectory_step: 5
-                time_step: 3
-            AckermannConstraints:
-                min_turning_r: 0.2
-            critics:
-                [
-                    "ConstraintCritic",
-                    "CostCritic",
-                    "GoalCritic",
-                    "GoalAngleCritic",
-                    "PathAlignCritic",
-                    "PathFollowCritic",
-                    "PathAngleCritic",
-                    "PreferForwardCritic",
-                ]
-            ConstraintCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 4.0
-            GoalCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 5.0
-                threshold_to_consider: 1.4
-            GoalAngleCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 3.0
-                threshold_to_consider: 0.5
-            PreferForwardCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 5.0
-                threshold_to_consider: 0.5
-            CostCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 3.81
-                critical_cost: 300.0
-                consider_footprint: true
-                collision_cost: 1000000.0
-                near_goal_distance: 1.0
-                trajectory_point_step: 2
-            PathAlignCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 14.0
-                max_path_occupancy_ratio: 0.05
-                trajectory_point_step: 4
-                threshold_to_consider: 0.5
-                offset_from_furthest: 20
-                use_path_orientations: false
-            PathFollowCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 5.0
-                offset_from_furthest: 5
-                threshold_to_consider: 1.4
-            PathAngleCritic:
-                enabled: true
-                cost_power: 1
-                cost_weight: 2.0
-                offset_from_furthest: 4
-                threshold_to_consider: 0.5
-                max_angle_to_furthest: 1.0
-                mode: 0
-            # TwirlingCritic:
-            #   enabled: true
-            #   twirling_cost_power: 1
-            #   twirling_cost_weight: 10.0
 
 global_costmap:
     global_costmap:
@@ -331,26 +251,15 @@ behavior_server:
         local_footprint_topic: local_costmap/published_footprint
         global_footprint_topic: global_costmap/published_footprint
         cycle_frequency: 10.0
-        behavior_plugins:
-            ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
-        spin:
-            plugin: "nav2_behaviors::Spin"
-        backup:
-            plugin: "nav2_behaviors::BackUp"
-        drive_on_heading:
-            plugin: "nav2_behaviors::DriveOnHeading"
+        # BackUp・Spinは両輪正転では実行できないため、走行する回復動作は読み込まない。
+        behavior_plugins: ["wait"]
         wait:
             plugin: "nav2_behaviors::Wait"
-        assisted_teleop:
-            plugin: "nav2_behaviors::AssistedTeleop"
         local_frame: odom
         global_frame: map
         robot_base_frame: base_link
         transform_tolerance: 0.1
         simulate_ahead_time: 2.0
-        max_rotational_vel: 1.0
-        min_rotational_vel: 0.4
-        rotational_acc_lim: 3.2
         enable_stamped_cmd_vel: false
 
 waypoint_follower:
@@ -367,9 +276,12 @@ waypoint_follower:
 velocity_smoother:
     ros__parameters:
         smoothing_frequency: 20.0
-        scale_velocities: False
+        # 前進と旋回の速度変化を同じ比率で抑え、最小旋回半径を保つ。
+        scale_velocities: True
         feedback: "OPEN_LOOP"
-        max_velocity: [0.5, 0.0, 2.0]
+        # [前後速度[m/s], 横速度[m/s], 旋回角速度[rad/s]]の上下限。前後上限は実測値。
+        # 負の角速度は右旋回に必要。車輪の逆転とは異なるため残す。
+        max_velocity: [0.3665, 0.0, 2.0]
         min_velocity: [0.0, 0.0, -2.0]
         max_accel: [2.5, 0.0, 3.2]
         max_decel: [-2.5, 0.0, -3.2]

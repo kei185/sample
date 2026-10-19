@@ -6,9 +6,9 @@ left to right: 18cm
 
 bottom to top: 22ch
 
-Lidar: center of plane, 20cm height
+Lidar: center of left to right, 14cm from back, 20cm height
 
-imu: center of left to right, 10cm from back
+imu: center of left to right, 10cm from back, 16.5cm height
 
 wheel: 5cm from back, center of left to right
 直径: 42 mm
@@ -22,3 +22,4 @@ caster: 15cm from back, center of left to right
 モーターは正転しか許さない  
 通信障害のためのモーター駆動時間のカードはしていない
 mcu soft reset なし
+lidarのtimestampが適当　デバイス生成のtimestampをつかわずmcuで生成してる
