@@ -16,9 +16,9 @@ def generate_launch_description():
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "display.launch.py")
+                os.path.join(pkg_share, "launch", "description.launch.py")
             ),
-            launch_arguments={"use_rviz": "false", "use_sim_time": use_sim_time}.items(),
+            launch_arguments={"use_sim_time": use_sim_time}.items(),
         ),
         Node(
             package="robot_localization",

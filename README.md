@@ -1,5 +1,85 @@
 # sample
 
+## 実機と可視化の分担
+
+| マシン | パッケージ | 起動するもの |
+| --- | --- | --- |
+| 実機PC | `my_node` | シリアル入出力、センサー配信、Commander、Governor、モデル・TF配信、EKF、SLAM |
+| 可視化PC | `my_visualization` | RVizによるモデル・地図・LiDAR・推定軌跡の表示 |
+
+実機PCが`robot_description`、`tf`、`tf_static`、`map`、`scan`、`odometry/filtered`を配信する。
+可視化PCはそれらを購読する。モデルの読み込みとTF配信も実機側で行うので、RVizを止めても実機側の処理は継続する。
+可視化パッケージは実機パッケージ、sensor-flow、C++コンパイラに依存しない。
+
+両PCでROS Jazzyを使い、同じLANから通信できるようにする。
+各PCでROSを実行するすべての端末に、同じドメインとDDSの探索範囲を設定する。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export ROS_DOMAIN_ID=18
+export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+```
+
+`ROS_DOMAIN_ID`は両PCで同じ値なら変更してよい。
+`ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`では別PCを自動検出できない。
+マルチキャストによる探索が通るネットワークを使い、両PCの時計も同期する。
+設定はlaunchから書き換えず、各PCの環境変数で指定する。
+
+## 実機PCでの起動
+
+既存のsensor-flowライブラリをビルド・インストールした状態で、実機パッケージだけをビルドする。
+
+```bash
+rosdep install --from-paths src/my_node --ignore-src -r -y
+colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
+source install/setup.bash
+ros2 launch my_node my_node.launch.py
+```
+
+このlaunchは、モデル・TF配信、EKF、SLAMを起動する。
+EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
+SLAMは`scan`を購読し、`map`と`map -> odom`を配信する。Nav2自体の起動は含まない。
+
+実機PCの別端末でも上記のROS環境と通信設定を読み込み、センサー入力を起動する。
+
+```bash
+source install/setup.bash
+ros2 run my_node my_node /dev/ttyACM0
+```
+
+シリアル接続先は実機に合わせる。既存のプロトコルでENTER入力を待つため、C++アプリは端末から起動する。
+CommanderとGovernorのスレッドは引き続きC++アプリ内で管理する。
+
+## 可視化PCでの起動
+
+可視化パッケージだけ依存を導入してビルドする。実機用のコンパイラ指定とsensor-flowのビルドは不要。
+
+```bash
+rosdep install --from-paths src/my_visualization --ignore-src -r -y
+colcon build --packages-select my_visualization
+source install/setup.bash
+ros2 launch my_visualization visualization.launch.py
+```
+
+RVizの基準座標は`map`で、地図・モデル・TF・LiDAR・EKFのOdometryを表示する。
+`robot_description`と`map`はTransient Local、`scan`はBest Effortで購読する。
+カスタムRViz設定は`rviz_config:=/path/to/config.rviz`で指定できる。
+
+地図を作らずモデルだけ確認する場合は、実機PCで次を起動する。
+
+```bash
+ros2 launch my_node description.launch.py
+```
+
+可視化PCでは地図を必要としない座標を指定する。
+
+```bash
+ros2 launch my_visualization visualization.launch.py fixed_frame:=base_footprint
+```
+
+可視化PCで`ros2 topic list`に実機のトピックが出ない場合は、ドメイン・探索範囲・ネットワークを確認する。
+ROS CLIのdaemonを起動済みの端末で通信設定を変えた場合は、`ros2 daemon stop`の後で再確認する。
+
 ## ロボットモデル
 
 Nav2公式チュートリアルの[sam_bot_description](https://github.com/ros-navigation/navigation2_tutorials/blob/f3bd892a60d3fb91560ecb726bf922eb9bcbc858/sam_bot_description/src/description/sam_bot_description.urdf)を元に、
@@ -23,41 +103,14 @@ Nav2公式チュートリアルの[sam_bot_description](https://github.com/ros-n
 | base_link | imu_link | 0.05 | 0 | imu_height - 0.021 |
 | base_link | lidar_link | 0.05 | 0 | 0.179 |
 
+IMUの高さは実機PCのlaunchに`imu_height:=0.08`のように地面からの実測値[m]を指定する。
+車輪角度の配信は未実装のため、joint_state_publisherが角度0を配信し、モデル上の車輪は回転しない。
 筐体は車輪の上から全高までの箱で近似し、キャスター径とセンサーの外観寸法も表示用の仮値とする。
 IMU・LiDARの取り付け軸は`base_link`と同じ向きを仮定している。実機に合わせて高さと向きを調整すること。
 質量・慣性とGazeboの制御プラグインは含めていないため、現状は表示とTF用のモデルになる。
-
-## 起動
-
-ROS Jazzyで、既存のsensor-flowライブラリをビルド・インストールした状態で実行する。
-追加の実行時依存は`rosdep install --from-paths src/my_node --ignore-src -r -y`で導入できる。
-
-```bash
-colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
-source install/setup.bash
-ros2 launch my_node display.launch.py
-```
-
-RVizを使わずにモデルとTFだけを配信する場合は`use_rviz:=false`を指定する。
-IMUの高さは`imu_height:=0.08`のように地面からの実測値[m]を指定する。
-車輪角度の配信は未実装のため、joint_state_publisherが角度0を配信し、モデル上の車輪は回転しない。
-
-実機のセンサー入力は別の端末から起動する。
-
-```bash
-ros2 run my_node my_node /dev/ttyACM0
-```
-
-モデル・EKF・SLAMをまとめて起動する場合は次を使う。
-
-```bash
-ros2 launch my_node my_node.launch.py
-```
-
-EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
-SLAMは`scan`を購読し、`map -> odom`を配信する。Nav2自体の起動は含まない。
 Nav2のglobal/local costmapの外形は車軸基準で前150mm・後50mm・左右90mmに合わせている。
 
 ## reference
 
 - https://arxiv.org/pdf/1806.03581
+- https://github.com/ros2/ros2_documentation/blob/jazzy/source/Tutorials/Advanced/Improved-Dynamic-Discovery.rst
