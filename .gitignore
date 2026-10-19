@@ -9,6 +9,7 @@ frames*
 
 src/my_node/src/my-plot/.git
 
-# src配下ではmy_nodeだけを追跡する。
+# src配下では実機と可視化のパッケージを追跡する。
 /src/*
 !/src/my_node/
+!/src/my_visualization/

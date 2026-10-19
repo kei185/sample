@@ -9,7 +9,7 @@ namespace commander
 {
 
 Commander::Commander(xqueue::Queue<frame::MotorCommand>& directiveQueue)
-    : Node("commnder"), directiveQueue(directiveQueue)
+    : Node("commander"), directiveQueue(directiveQueue)
 {
         this->cmdVel = this->create_subscription<geometry_msgs::msg::Twist>(
                 "cmd_vel",
@@ -22,6 +22,7 @@ void Commander::onMessage(const geometry_msgs::msg::Twist::SharedPtr twist)
         auto cmd = transform(*twist);
         RCLCPP_INFO(this->get_logger(), "a");
         this->directiveQueue.push(std::move(cmd));
+        this->directiveQueue.awakeConsumer();
 }
 
 frame::MotorCommand Commander::transform(geometry_msgs::msg::Twist&)

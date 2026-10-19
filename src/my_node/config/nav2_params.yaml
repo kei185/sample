@@ -42,7 +42,7 @@ bt_navigator:
     ros__parameters:
         global_frame: map
         robot_base_frame: base_link
-        odom_topic: /demo/odom
+        odom_topic: odometry/filtered
         bt_loop_duration: 10
         default_server_timeout: 20
         wait_for_service_timeout: 1000
@@ -86,9 +86,9 @@ controller_server:
         progress_checker_plugins: ["progress_checker"]
         goal_checker_plugins: ["general_goal_checker"] # "precise_goal_checker"
         controller_plugins: ["FollowPath"]
-        odom_topic: /demo/odom
+        odom_topic: odometry/filtered
         use_realtime_priority: false
-        enable_stamped_cmd_vel: true
+        enable_stamped_cmd_vel: false
 
         # Progress checker parameters
         progress_checker:
@@ -119,7 +119,7 @@ controller_server:
             vy_std: 0.2
             wz_std: 0.4
             vx_max: 0.5
-            vx_min: -0.35
+            vx_min: 0.0
             vy_max: 0.5
             wz_max: 1.9
             iteration_count: 1
@@ -209,7 +209,7 @@ global_costmap:
             publish_frequency: 1.0
             global_frame: map
             robot_base_frame: base_link
-            robot_radius: 0.3
+            footprint: "[ [0.15, 0.09], [0.15, -0.09], [-0.05, -0.09], [-0.05, 0.09] ]"
             resolution: 0.05
             track_unknown_space: true
             plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -253,7 +253,7 @@ local_costmap:
             width: 3
             height: 3
             resolution: 0.05
-            footprint: "[ [0.21, 0.195], [0.21, -0.195], [-0.21, -0.195], [-0.21, 0.195] ]"
+            footprint: "[ [0.15, 0.09], [0.15, -0.09], [-0.05, -0.09], [-0.05, 0.09] ]"
             plugins: ["voxel_layer", "inflation_layer"]
             inflation_layer:
                 plugin: "nav2_costmap_2d::InflationLayer"
@@ -351,7 +351,7 @@ behavior_server:
         max_rotational_vel: 1.0
         min_rotational_vel: 0.4
         rotational_acc_lim: 3.2
-        enable_stamped_cmd_vel: true
+        enable_stamped_cmd_vel: false
 
 waypoint_follower:
     ros__parameters:
@@ -370,22 +370,22 @@ velocity_smoother:
         scale_velocities: False
         feedback: "OPEN_LOOP"
         max_velocity: [0.5, 0.0, 2.0]
-        min_velocity: [-0.5, 0.0, -2.0]
+        min_velocity: [0.0, 0.0, -2.0]
         max_accel: [2.5, 0.0, 3.2]
         max_decel: [-2.5, 0.0, -3.2]
-        odom_topic: "/demo/odom"
+        odom_topic: "odometry/filtered"
         odom_duration: 0.1
         deadband_velocity: [0.0, 0.0, 0.0]
         velocity_timeout: 1.0
-        enable_stamped_cmd_vel: true
+        enable_stamped_cmd_vel: false
 
 collision_monitor:
     ros__parameters:
         base_frame_id: "base_footprint"
         odom_frame_id: "odom"
         cmd_vel_in_topic: "cmd_vel_smoothed"
-        cmd_vel_out_topic: "/demo/cmd_vel"
-        enable_stamped_cmd_vel: true
+        cmd_vel_out_topic: "cmd_vel"
+        enable_stamped_cmd_vel: false
         state_topic: "collision_monitor_state"
         transform_tolerance: 0.2
         source_timeout: 1.0
@@ -471,4 +471,4 @@ loopback_simulator:
         map_frame_id: "map"
         scan_frame_id: "base_scan" # tb4_loopback_simulator.launch.py remaps to 'rplidar_link'
         update_duration: 0.02
-        enable_stamped_cmd_vel: true
+        enable_stamped_cmd_vel: false

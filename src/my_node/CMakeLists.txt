@@ -57,9 +57,21 @@ target_link_libraries(
 )
 
 
+set_target_properties(my_node PROPERTIES INSTALL_RPATH "$ORIGIN/..")
+
+install(
+    FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor-flow/install/lib/libsensor-flow.so
+    DESTINATION lib
+)
+
 install(
     TARGETS my_node
     DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+    DIRECTORY launch config urdf
+    DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

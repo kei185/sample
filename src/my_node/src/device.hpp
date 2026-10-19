@@ -8,9 +8,9 @@ namespace device
 constexpr double RADIAN_PER_DEGREE = std::numbers::pi / 180.0;
 // TODO 測る
 constexpr double MAX_VELOCITY = 0.5;
-constexpr double WHEEL_RADIUS = 0.1;
-// TODO: 仮値。実機の左右車輪の中心間距離[m]に置き換える。
-constexpr double WHEEL_SEPARATION       = 0.3;
+constexpr double WHEEL_RADIUS = 0.021;
+constexpr double WHEEL_SEPARATION       = 0.13;
+// DEVICE.mdの車輪径42mm・左右中心間130mmをmへ変換する。
 constexpr double ENCODER_SAMPLE_RATE_HZ = 10.0;
 const double VELOCITY_PER_ROTATION = 2.0 * std::numbers::pi * WHEEL_RADIUS * ENCODER_SAMPLE_RATE_HZ;
 
