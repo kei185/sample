@@ -5,6 +5,7 @@
 build/
 install/
 log/
+/flow*
 frames*
 
 src/my_node/src/my-plot/.git
