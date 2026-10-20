@@ -1,17 +1,23 @@
-.PHONY: build init clean run display preview model nodes topics imu scan odom ekf map tf
+.PHONY: build visual init clean run stack display preview model nodes topics imu scan odom ekf map tf
 
 init:
-	colcon build --symlink-install
+	colcon build --symlink-install --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
 
 
 build:
-	colcon build
+	colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
+
+visual:
+	colcon build --packages-select my_visualization
 
 clean:
 	rm -rf build
 
 run:
 	ros2 launch my_node my_node.launch.py
+
+stack:
+	ros2 launch my_node stack.launch.py
 
 display:
 	ros2 launch my_visualization visualization.launch.py

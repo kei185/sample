@@ -4,7 +4,8 @@
 
 | マシン | パッケージ | 起動するもの |
 | --- | --- | --- |
-| 実機PC | `my_node` | シリアル入出力、センサー配信、Commander、Governor、モデル・TF配信、EKF、SLAM、Nav2 |
+| 実機PC | `my_node`（`make run`） | シリアル入出力、センサー配信、Commander、Governor |
+| 実機PC | `my_node`（`make stack`） | モデル・TF配信、EKF、SLAM、Nav2 |
 | 可視化PC | `my_visualization` | RVizによるモデル・地図・LiDAR・推定軌跡の表示 |
 
 実機PCが`robot_description`、`tf`、`tf_static`、`map`、`scan`、`odometry/filtered`を配信する。
@@ -60,7 +61,11 @@ ROS環境とビルド済みワークスペースの`install/setup.bash`を読み
 
 | コマンド | 内容 |
 | --- | --- |
-| `make run` | 実機側一式を起動 |
+| `make build` | `my_node`だけビルド |
+| `make visual` | `my_visualization`だけビルド |
+| `make init` | `my_node`だけsymlink-installでビルド |
+| `make run` | `my_node`本体を起動 |
+| `make stack` | モデル・TF配信、EKF、SLAM、Nav2を起動 |
 | `make display` | 可視化PCでRVizを起動 |
 | `make preview` | 可視化PCでモデル確認用のRVizを起動 |
 | `make model` | モデル・TF配信だけ起動 |
@@ -80,20 +85,37 @@ ROS環境とビルド済みワークスペースの`install/setup.bash`を読み
 
 ```bash
 rosdep install --from-paths src/my_node --ignore-src -r -y
-colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
+make build
 source install/setup.bash
-ros2 launch my_node my_node.launch.py serial_device:=/dev/ttyACM0
+make stack
 ```
 
-このlaunchは、C++アプリのシリアル入出力とセンサー配信、モデル・TF配信、EKF、SLAM、Nav2をまとめて起動する。
-シリアル接続先は`serial_device`で指定する。既存プロトコルのENTER待ちにはlaunchが改行を送り、ハンドシェイクと時刻同期の後に自動でスキャンを開始する。
-C++アプリが終了すると、同じlaunchのほかのノードも終了する。
+`make stack`はモデル・TF配信、EKF、SLAM、Nav2を起動する。
+別の端末で同じROS環境とワークスペースを読み込み、C++アプリを起動する。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+make run
+```
+
+`make run`は`my_node.launch.py`でC++アプリだけを起動し、`make stack`は`stack.launch.py`を起動する。
+起動した端末ごとにCtrl+Cで停止する。`my_node`を終了・再起動しても、別端末のモデル・EKF・SLAM・Nav2は継続する。
+`make model`はモデル配信だけを確認するときに使い、`make stack`に含まれるモデル配信と同時には起動しない。
+
+シリアル接続先の既定値は`/dev/ttyACM0`。変更する場合は次のように直接launchする。
+
+```bash
+ros2 launch my_node my_node.launch.py serial_device:=/dev/ttyACM1
+```
+
+既存プロトコルのENTER待ちには`my_node.launch.py`が改行を送り、ハンドシェイクと時刻同期の後に自動でスキャンを開始する。
 CommanderとGovernorのスレッドは引き続きC++アプリ内で管理する。
 
 EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
 SLAMは`scan`を購読し、`map`と`map -> odom`を配信する。
 Nav2は`navigation_launch.py`から起動するため、AMCLと地図サーバーは起動せず、SLAMの地図とTFを使う。
-Nav2の設定は`config/nav2_params.yaml`を使い、`nav2_params_file:=/path/to/params.yaml`で変更できる。
+Nav2の設定は`config/nav2_params.yaml`を使い、`ros2 launch my_node stack.launch.py nav2_params_file:=/path/to/params.yaml`で変更できる。
 
 速度指令の経路は次のようになる。指令の型はCommanderに合わせて`geometry_msgs/msg/Twist`を使う。
 
@@ -154,8 +176,8 @@ Governorが使う`NavigateToPose`だけを有効にし、Nav2同梱の`navigate_
 Commanderの各車輪0〜100%制限も最終段に残す。
 経路探索は既存のNavfnを使う。旋回半径を考慮した経路生成や、真後ろの経路からの切り返しは扱わない。実機での走行は未確認。
 
-C++アプリだけを端末から起動して調査する場合は、次の従来の起動方法も使える。
-統合launchと同時に実行するとシリアルポートとノードが重複するため、どちらか一方を起動する。
+`make run`の代わりに、C++アプリを直接起動して調査することもできる。
+この方法では、プロトコルのスキャン開始待ちにENTERを押す。
 
 ```bash
 ros2 run my_node my_node /dev/ttyACM0
@@ -167,7 +189,7 @@ ros2 run my_node my_node /dev/ttyACM0
 
 ```bash
 rosdep install --from-paths src/my_visualization --ignore-src -r -y
-colcon build --packages-select my_visualization
+make visual
 source install/setup.bash
 ros2 launch my_visualization visualization.launch.py
 ```
