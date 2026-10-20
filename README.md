@@ -11,24 +11,52 @@
 可視化PCはそれらを購読する。モデルの読み込みとTF配信も実機側で行うので、RVizを止めても実機側の処理は継続する。
 可視化パッケージは実機パッケージ、sensor-flow、C++コンパイラに依存しない。
 
-両PCでROS Jazzyを使い、同じLANから通信できるようにする。
-各PCでROSを実行するすべての端末に、同じドメインとDDSの探索範囲を設定する。
+両PCでROS Jazzyを使い、同じLANから通信できるようにする。時計も同期する。
+ROSを実行する端末では両PCのドメインを0にそろえる。
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-export ROS_DOMAIN_ID=18
-export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+export ROS_DOMAIN_ID=0
 ```
 
-`ROS_DOMAIN_ID`は両PCで同じ値なら変更してよい。
-`ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`では別PCを自動検出できない。
-マルチキャストによる探索が通るネットワークを使い、両PCの時計も同期する。
-設定はlaunchから書き換えず、各PCの環境変数で指定する。
+実機側のLinux Dockerは`network_mode: host`を使い、FastDDSを次の設定で起動する。
+
+```bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds.xml
+```
+
+`Lidar-SLAM/env/fastdds.xml`をコンテナの`/etc/fastdds.xml`へ置く。
+`Dockerfile`と`Dockerfile_release`でビルドするイメージには、このファイルと環境変数を含めている。
+UDPの最大サイズを1400バイトに制限し、大きなメッセージはDDS側で分割する。
+IPフラグメントが途中で失われると、ノードとTFは見えても`robot_description`本文が届かない場合がある。
+
+可視化側のmacOS＋OrbStackでは、Linux VMとLANの間にNATがある。
+`Lidar-SLAM/env/docker-compose.yml`はbridge接続でDDSのUDPポート`7410–7511`を同じ番号で公開する。
+これは`ROS_DOMAIN_ID=0`、CycloneDDSの参加者インデックス0〜50に対応する。ドメインを変える場合は公開ポートも変更する。
+`env/cyclonedds.xml`で探索先と、返答先として通知するMacのLAN側IPを指定する。
+こちらもUDPを1400バイト以下に分割する。
+
+`Lidar-SLAM/env/.env`にはMac本体とRasPi本体のLAN側IPを設定する。コンテナのIPは使わない。
+
+```dotenv
+ROS_LOCAL_IP=192.168.0.10
+ROS_PEER_IP=192.168.0.6
+```
+
+可視化側はcomposeの`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`と`ROS_AUTOMATIC_DISCOVERY_RANGE=SYSTEM_DEFAULT`を使い、
+`CYCLONEDDS_URI=file:///etc/cyclonedds.xml`でXMLのユニキャスト設定を読み込む。
+OrbStackの「Expose ports to LAN」を有効にする。端末から探索範囲を`LOCALHOST`や`SUBNET`へ上書きしない。
+IPが変わった場合は`.env`も更新する。各PCの設定はlaunchから書き換えない。
+noVNCは`6080:6080`で公開し、`http://localhost:6080/vnc.html`で開く。
+通信設定はノードの起動時に読み込まれるため、変更後はROSノードを起動し直す。OSの再起動は不要。
 
 ## Makefileからの起動・疎通確認
 
 ROS環境とビルド済みワークスペースの`install/setup.bash`を読み込んだ端末で実行する。
-上記の`ROS_DOMAIN_ID`と探索範囲も両PCで合わせる。
+`ROS_DOMAIN_ID`は両PCで0にそろえ、探索設定は上記の各環境に合わせる。
+`make nodes`と`make topics`は探索を10秒待ってから一覧を表示する。
 
 | コマンド | 内容 |
 | --- | --- |

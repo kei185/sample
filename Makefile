@@ -23,10 +23,10 @@ model:
 	ros2 launch my_node description.launch.py
 
 nodes:
-	ros2 node list --no-daemon
+	ros2 node list --no-daemon --spin-time 10
 
 topics:
-	ros2 topic list --no-daemon -t
+	ros2 topic list --no-daemon --spin-time 10 -t
 
 imu:
 	ros2 topic echo /imu --once --qos-reliability best_effort
