@@ -5,10 +5,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include "geometry_msgs/msg/twist.hpp"
 #include <functional>
-#include <rclcpp/logging.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <rclcpp/qos.hpp>
+#include <thread>
 
 namespace commander
 {
@@ -22,11 +24,30 @@ Commander::Commander(xqueue::Queue<frame::MotorCommand>& directiveQueue)
                 std::bind(&Commander::onMessage, this, std::placeholders::_1));
 }
 
+void Commander::run(std::stop_token st)
+{
+        using namespace std::chrono_literals;
+        RCLCPP_INFO(this->get_logger(), "node commander running");
+        while (rclcpp::ok() && !st.stop_requested()) {
+                rclcpp::spin_some(this->get_node_base_interface());
+                std::this_thread::sleep_for(10ms);
+        }
+}
+
 void Commander::onMessage(const geometry_msgs::msg::Twist::SharedPtr twist)
 {
         auto cmd = transform(*twist);
         this->directiveQueue.push(std::move(cmd));
         this->directiveQueue.awakeConsumer();
+        RCLCPP_INFO_THROTTLE(this->get_logger(),
+                             *this->get_clock(),
+                             5000,
+                             "cmd_vel queued: linear.x=%.3f m/s, angular.z=%.3f rad/s, "
+                             "PWM(left=%u%%, right=%u%%)",
+                             twist->linear.x,
+                             twist->angular.z,
+                             static_cast<unsigned>(cmd.left),
+                             static_cast<unsigned>(cmd.right));
 }
 
 frame::MotorCommand Commander::transform(geometry_msgs::msg::Twist& twist)

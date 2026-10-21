@@ -44,6 +44,7 @@ Governor::Governor() : Node("governor")
 
 void Governor::run(std::stop_token st)
 {
+        RCLCPP_INFO(this->get_logger(), "node governor running");
         tf2_ros::Buffer            tfBuffer(this->get_clock());
         tf2_ros::TransformListener tfListener(tfBuffer);
 
@@ -51,8 +52,17 @@ void Governor::run(std::stop_token st)
                 rclcpp::spin_some(this->get_node_base_interface());
                 std::this_thread::sleep_for(100ms);
 
-                if (!this->grid || !this->client->action_server_is_ready())
+                if (!this->grid) {
+                        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000, "Waiting for map");
                         continue;
+                }
+                if (!this->client->action_server_is_ready()) {
+                        RCLCPP_INFO_THROTTLE(get_logger(),
+                                             *get_clock(),
+                                             5000,
+                                             "Waiting for navigate_to_pose action server");
+                        continue;
+                }
 
                 const auto frameId =
                         this->grid->header.frame_id.empty() ? "map" : this->grid->header.frame_id;
@@ -68,6 +78,15 @@ void Governor::run(std::stop_token st)
 
                 const auto info   = this->grid->info;
                 auto       wfd    = explorer::WFD(std::move(this->grid.value()));
+                RCLCPP_INFO_THROTTLE(get_logger(),
+                                     *get_clock(),
+                                     5000,
+                                     "WFD start: frame=%s, grid=%u x %u, robot=(%.3f, %.3f)",
+                                     frameId.c_str(),
+                                     info.width,
+                                     info.height,
+                                     this->pose.pose.position.x,
+                                     this->pose.pose.position.y);
                 const auto result = wfd.run(this->pose.pose);
 
                 this->grid.reset();
@@ -80,7 +99,14 @@ void Governor::run(std::stop_token st)
                 }
 
                 const auto representative = wfd.getNearestRepresentative(this->pose.pose);
-                if (!representative || st.stop_requested())
+                if (!representative) {
+                        RCLCPP_INFO_THROTTLE(get_logger(),
+                                             *get_clock(),
+                                             5000,
+                                             "No frontier representative found");
+                        continue;
+                }
+                if (st.stop_requested())
                         continue;
 
                 const auto& origin = info.origin;
@@ -104,7 +130,11 @@ void Governor::run(std::stop_token st)
                 goal.pose.pose.position.z  = target.z();
                 goal.pose.pose.orientation = this->pose.pose.orientation;
                 const auto status          = this->sendGoal(std::move(goal), st);
-                RCLCPP_INFO(get_logger(), "Navigation goal status: %s", toString(status));
+                RCLCPP_INFO_THROTTLE(get_logger(),
+                                     *get_clock(),
+                                     5000,
+                                     "Navigation goal status: %s",
+                                     toString(status));
         }
 }
 
@@ -114,7 +144,12 @@ std::optional<geometry_msgs::msg::TransformStamped> Governor::getTf(tf2_ros::Buf
         try {
                 return tfBuffer.lookupTransform(mapId, "base_link", tf2::TimePointZero);
         } catch (const tf2::TransformException& error) {
-                RCLCPP_DEBUG(get_logger(), "Waiting for TF: %s", error.what());
+                RCLCPP_INFO_THROTTLE(get_logger(),
+                                     *get_clock(),
+                                     5000,
+                                     "Waiting for TF %s <- base_link: %s",
+                                     mapId.c_str(),
+                                     error.what());
                 return {};
         }
 }
@@ -130,6 +165,13 @@ uint8_t Governor::sendGoal(nav2_msgs::action::NavigateToPose::Goal goal, std::st
         sendGoalOptions.feedback_callback = std::bind(&Governor::feedbackCallback, this, _1, _2);
         sendGoalOptions.result_callback   = std::bind(&Governor::resultCallback, this, _1);
 
+        RCLCPP_INFO_THROTTLE(get_logger(),
+                             *get_clock(),
+                             5000,
+                             "Sending navigation goal: frame=%s, position=(%.3f, %.3f)",
+                             goal.pose.header.frame_id.c_str(),
+                             goal.pose.pose.position.x,
+                             goal.pose.pose.position.y);
         auto future = this->client->async_send_goal(goal, sendGoalOptions);
 
         while (rclcpp::ok() && !st.stop_requested()) {
@@ -155,7 +197,11 @@ void Governor::feedbackCallback(
         rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::SharedPtr,
         const std::shared_ptr<const nav2_msgs::action::NavigateToPose::Feedback> feedback)
 {
-        RCLCPP_INFO(get_logger(), "remaining distance: %f", feedback->distance_remaining);
+        RCLCPP_INFO_THROTTLE(get_logger(),
+                             *get_clock(),
+                             5000,
+                             "remaining distance: %.3f m",
+                             feedback->distance_remaining);
 }
 
 void Governor::resultCallback(
@@ -181,6 +227,14 @@ void Governor::resultCallback(
 void Governor::mapOnMessage(const nav_msgs::msg::OccupancyGrid::SharedPtr grid)
 {
         this->grid = *grid;
+        RCLCPP_INFO_THROTTLE(get_logger(),
+                             *get_clock(),
+                             5000,
+                             "map received: frame=%s, grid=%u x %u, resolution=%.3f m",
+                             grid->header.frame_id.c_str(),
+                             grid->info.width,
+                             grid->info.height,
+                             grid->info.resolution);
 }
 
 const char* toString(uint8_t status)

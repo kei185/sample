@@ -3,6 +3,7 @@
 #include "sensor_msgs/msg/laser_scan.hpp"
 
 #include <rclcpp/executors/single_threaded_executor.hpp>
+#include <rclcpp/logging.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
 
@@ -23,6 +24,8 @@ Lidar::Lidar(xqueue::Queue<frame::LidarPoint>& parsedQueue)
 
 void Lidar::run(std::stop_token st)
 {
+        RCLCPP_INFO(this->get_logger(), "node lidar running");
+        uint64_t published = 0u;
         while (!st.stop_requested()) {
                 if (this->parsedQueue.empty())
                         continue;
@@ -30,6 +33,15 @@ void Lidar::run(std::stop_token st)
                 auto data = this->parsedQueue.pop();
                 auto msg  = transform(data);
                 this->publisher->publish(msg);
+                ++published;
+                RCLCPP_INFO_THROTTLE(this->get_logger(),
+                                     *this->get_clock(),
+                                     5000,
+                                     "scan published: count=%llu, points=%zu, stamp=%d.%09u",
+                                     static_cast<unsigned long long>(published),
+                                     msg.ranges.size(),
+                                     msg.header.stamp.sec,
+                                     msg.header.stamp.nanosec);
         }
 }
 

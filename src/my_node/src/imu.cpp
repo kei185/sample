@@ -4,6 +4,7 @@
 
 #include <sensor_msgs/msg/imu.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
+#include <rclcpp/logging.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
 #include <stop_token>
@@ -20,10 +21,28 @@ Imu::Imu(xqueue::Queue<frame::Imu>& parsedQueue) : Node("imu"), parsedQueue(pars
 
 void Imu::run(std::stop_token st)
 {
+        RCLCPP_INFO(this->get_logger(), "node imu running");
+        uint64_t published = 0u;
         while (this->parsedQueue.waitData(st)) {
                 auto data = this->parsedQueue.pop();
                 auto msg  = transform(data);
                 this->publisher->publish(msg);
+                ++published;
+                RCLCPP_INFO_THROTTLE(this->get_logger(),
+                                     *this->get_clock(),
+                                     5000,
+                                     "imu published: count=%llu, stamp=%d.%09u, "
+                                     "gyro=(%.3f, %.3f, %.3f) rad/s, "
+                                     "accel=(%.3f, %.3f, %.3f) m/s^2",
+                                     static_cast<unsigned long long>(published),
+                                     msg.header.stamp.sec,
+                                     msg.header.stamp.nanosec,
+                                     msg.angular_velocity.x,
+                                     msg.angular_velocity.y,
+                                     msg.angular_velocity.z,
+                                     msg.linear_acceleration.x,
+                                     msg.linear_acceleration.y,
+                                     msg.linear_acceleration.z);
         }
 }
 

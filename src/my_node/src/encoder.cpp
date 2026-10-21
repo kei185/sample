@@ -5,6 +5,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 
 #include <nav_msgs/msg/odometry.hpp>
+#include <rclcpp/logging.hpp>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/utilities.hpp>
 
@@ -22,10 +23,23 @@ Encoder::Encoder(xqueue::Queue<frame::Encoder>& parsedQueue)
 
 void Encoder::run(std::stop_token st)
 {
+        RCLCPP_INFO(this->get_logger(), "node encoder running");
+        uint64_t published = 0u;
         while (this->parsedQueue.waitData(st)) {
                 auto data = this->parsedQueue.pop();
                 auto msg  = transform(data);
                 this->publisher->publish(msg);
+                ++published;
+                RCLCPP_INFO_THROTTLE(this->get_logger(),
+                                     *this->get_clock(),
+                                     5000,
+                                     "odom published: count=%llu, stamp=%d.%09u, "
+                                     "linear.x=%.3f m/s, angular.z=%.3f rad/s",
+                                     static_cast<unsigned long long>(published),
+                                     msg.header.stamp.sec,
+                                     msg.header.stamp.nanosec,
+                                     msg.twist.twist.linear.x,
+                                     msg.twist.twist.angular.z);
         }
 }
 

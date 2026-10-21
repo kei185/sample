@@ -31,6 +31,9 @@ int main(int argc, char** argv)
                 return 1;
         }
         auto app       = std::move(initialized.value());
+        RCLCPP_INFO(rclcpp::get_logger("main"),
+                    "Application initialized: serial=%s",
+                    args[1].c_str());
         auto commander = std::make_shared<commander::Commander>(*app->directiveQueue);
         auto governor  = std::make_shared<governor::Governor>();
 
@@ -64,12 +67,11 @@ int main(int argc, char** argv)
                 return 1;
         }
 
-        std::jthread commanderThread([commander](std::stop_token st) {
-                while (rclcpp::ok() && !st.stop_requested()) {
-                        rclcpp::spin_some(commander);
-                        std::this_thread::sleep_for(10ms);
-                }
-        });
+        RCLCPP_INFO(rclcpp::get_logger("main"),
+                    "Worker dispatch complete: parsers=%zu, distributors=%zu",
+                    app->parsers.size(),
+                    app->distributors.size());
+        std::jthread commanderThread([commander](std::stop_token st) { commander->run(st); });
         std::jthread governorThread([governor](std::stop_token st) { governor->run(st); });
         // CommanderとGovernorはWorkerへ入れず、mainがそれぞれのthreadを所有する。
 
