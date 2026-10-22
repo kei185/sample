@@ -1,11 +1,15 @@
 # sample
 
+このブランチはteleopで地図を調べる構成。Governor・WFDはビルド対象から外し、Nav2は起動しない。
+自動探索の変更と試走記録は、別のローカルブランチ`codex/exploration-checkpoint`に保存してある。
+
 ## 実機と可視化の分担
 
 | マシン | パッケージ | 起動するもの |
 | --- | --- | --- |
-| 実機PC | `my_node`（`make run`） | シリアル入出力、センサー配信、Commander、Governor |
-| 実機PC | `my_node`（`make stack`） | モデル・TF配信、EKF、SLAM、Nav2 |
+| 実機PC | `my_node`（`make run`） | シリアル入出力、センサー配信、Commander |
+| 実機PC | `my_node`（`make model`） | モデル・TF配信 |
+| 実機PC | `my_node`（`make stack`） | EKF、SLAM |
 | 可視化PC | `my_visualization` | RVizによるモデル・地図・LiDAR・推定軌跡の表示 |
 
 実機PCが`robot_description`、`tf`、`tf_static`、`map`、`scan`、`odometry/filtered`を配信する。
@@ -20,18 +24,16 @@ source /opt/ros/jazzy/setup.bash
 export ROS_DOMAIN_ID=0
 ```
 
-実機側のLinux Dockerは`network_mode: host`を使い、FastDDSを次の設定で起動する。
+実機側のLinux Dockerは`network_mode: host`を使う。
+Makefileは未指定の場合に`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`と、
+リポジトリ内の`src/my_node/config/fastdds.xml`を設定する。
+`make run`・`make model`・`make stack`・`make teleop`に共通で適用する。
+既存の環境変数によるRMWやプロファイルの指定は優先するため、可視化側のCycloneDDSも維持できる。
 
-```bash
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
-export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds.xml
-```
-
-`Lidar-SLAM/env/fastdds.xml`をコンテナの`/etc/fastdds.xml`へ置く。
-`Dockerfile`と`Dockerfile_release`でビルドするイメージには、このファイルと環境変数を含めている。
-UDPの最大サイズを1400バイトに制限し、大きなメッセージはDDS側で分割する。
-IPフラグメントが途中で失われると、ノードとTFは見えても`robot_description`本文が届かない場合がある。
+付属のFast DDS設定はUDPの最大サイズを1400バイトに制限し、大きなメッセージをDDS側で分割する。
+送信側と受信側の設定を揃える。受信側だけを1400バイトにすると、大きな`LaserScan`を受信できない場合がある。
+ROSのドメインは両PCで0にそろえ、実機側の探索範囲は`SUBNET`を使う。
+設定を変えた場合は関係するROSプロセスを起動し直す。OSやDockerの再起動は不要。
 
 可視化側のmacOS＋OrbStackでは、Linux VMとLANの間にNATがある。
 `Lidar-SLAM/env/docker-compose.yml`はbridge接続でDDSのUDPポート`7410–7511`を同じ番号で公開する。
@@ -65,7 +67,8 @@ ROS環境とビルド済みワークスペースの`install/setup.bash`を読み
 | `make visual` | `my_visualization`だけビルド |
 | `make init` | `my_node`だけsymlink-installでビルド |
 | `make run` | `my_node`本体を起動 |
-| `make stack` | モデル・TF配信、EKF、SLAM、Nav2を起動 |
+| `make stack` | EKF・SLAMを起動 |
+| `make teleop` | キーボードで前進・旋回・停止を指示 |
 | `make display` | 可視化PCでRVizを起動 |
 | `make preview` | 可視化PCでモデル確認用のRVizを起動 |
 | `make model` | モデル・TF配信だけ起動 |
@@ -87,11 +90,18 @@ ROS環境とビルド済みワークスペースの`install/setup.bash`を読み
 rosdep install --from-paths src/my_node --ignore-src -r -y
 make build
 source install/setup.bash
+make model
+```
+
+`make model`でモデルとTFを配信する。別の端末で同じROS環境とワークスペースを読み込み、地図生成を起動する。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
 make stack
 ```
 
-`make stack`はモデル・TF配信、EKF、SLAM、Nav2を起動する。
-別の端末で同じROS環境とワークスペースを読み込み、C++アプリを起動する。
+`make stack`はEKFとSLAMだけを起動する。さらに別の端末でC++アプリを起動する。
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -100,8 +110,8 @@ make run
 ```
 
 `make run`は`my_node.launch.py`でC++アプリだけを起動し、`make stack`は`stack.launch.py`を起動する。
-起動した端末ごとにCtrl+Cで停止する。`my_node`を終了・再起動しても、別端末のモデル・EKF・SLAM・Nav2は継続する。
-`make model`はモデル配信だけを確認するときに使い、`make stack`に含まれるモデル配信と同時には起動しない。
+起動した端末ごとにCtrl+Cで停止する。`my_node`を終了・再起動しても、別端末のモデル・EKF・SLAMは継続する。
+モデルとTFは`make model`だけが配信するため、地図生成中もこの端末を起動しておく。
 
 シリアル接続先の既定値は`/dev/ttyACM0`。変更する場合は次のように直接launchする。
 
@@ -110,38 +120,34 @@ ros2 launch my_node my_node.launch.py serial_device:=/dev/ttyACM1
 ```
 
 既存プロトコルのENTER待ちには`my_node.launch.py`が改行を送り、ハンドシェイクと時刻同期の後に自動でスキャンを開始する。
-CommanderとGovernorのスレッドは引き続きC++アプリ内で管理する。
+CommanderのスレッドはC++アプリ内で管理する。GovernorとWFDのソースは残すが、ビルドには含めない。
+
+さらに別の端末で同じROS環境とワークスペースを読み込み、キーボード操作を起動する。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+make teleop
+```
+
+`i`で前進、`u`で左へ曲がりながら前進、`o`で右へ曲がりながら前進、`k`で停止する。
+初期値は前進0.15m/s、旋回0.8rad/s。停止して終了する場合はCtrl+C。
+車輪は両方とも正転のみで、後退・その場旋回はできない。
+
+速度指令は`teleop_twist_keyboard -> cmd_vel -> Commander`の順で届く。
+型は`geometry_msgs/msg/Twist`。このブランチではNav2の速度平滑化・衝突監視を通さない。
+Commanderはnumericの`toVelocityRatio`で前進・旋回速度から左右の速度比を求める。
+左右それぞれの負値は0、上限超えは100%へ収め、NaN・無限大の場合は両輪0%を返す。
 
 EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
 SLAMは`scan`を購読し、`map`と`map -> odom`を配信する。
-Nav2は`navigation_launch.py`から起動するため、AMCLと地図サーバーは起動せず、SLAMの地図とTFを使う。
-Nav2の設定は`config/nav2_params.yaml`を使い、`ros2 launch my_node stack.launch.py nav2_params_file:=/path/to/params.yaml`で変更できる。
+`config/slam.yaml`はJazzyのSLAM標準設定を基に、試走時と同じ
+`restamp_tf: true`、`minimum_travel_distance: 0.1`、`minimum_travel_heading: 0.1`、
+`check_min_dist_and_heading_precisely: true`を設定する。
+地図の配信間隔5秒、スキャン処理の最小間隔0.5秒は維持する。
 
-速度指令の経路は次のようになる。指令の型はCommanderに合わせて`geometry_msgs/msg/Twist`を使う。
-
-```text
-Nav2 controller -> cmd_vel_nav -> velocity_smoother
-    -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> Commander
-```
-
-Nav2のOdometry入力は`odometry/filtered`へ合わせる。
-Commander::transformはnumericのtoVelocityRatioで前進・旋回速度から左右の速度比を求め、0〜100%のPWM指令へ変換する。
-左右それぞれの負値は0、上限超えは100%へ収め、NaN・無限大の場合は両輪0%を返す。
-異常値はERROR、範囲外を収めた場合はWARNで、入力・速度上下限・車輪間隔・左右の比率・実際のPWM出力を記録する。
-速度比とPWMの関係は線形と仮定し、最大速度には以下の実測値を使う。
-
-速度に関係する設定値は次のとおり。Commanderはdevice.hppを参照し、Nav2はnav2_params.yamlを参照する。
-
-| 設定箇所 | 対象 | 下限 | 上限 | 単位 |
-| --- | --- | --- | --- | --- |
-| device.hppのMIN/MAX_VELOCITY | Commanderが換算する片輪の速度 | 0.0 | 0.3665 | m/s |
-| FollowPath.desired_linear_vel | RPPの前進速度 | 0.0 | 0.3665 | m/s |
-| velocity_smoother.min/max_velocityのx | 平滑化後の前後速度 | 0.0 | 0.3665 | m/s |
-| velocity_smoother.min/max_velocityのy | 平滑化後の横速度 | 0.0 | 0.0 | m/s |
-| velocity_smoother.min/max_velocityのz | 平滑化後の旋回角速度 | -2.0 | 2.0 | rad/s |
-| docking_server.controller.v_linear_min / v_linear_max | ドッキングの前後速度 | 0.15 | 0.15 | m/s |
-
-sensor-echoのローカルREADMEにある走行測定から、距離を経過時間で割って速度を求めた。
+Commanderの片輪速度の換算範囲は`device.hpp`の0〜0.3665m/s。
+sensor-echoの測定結果は次のとおり。距離を経過時間で割って平均速度を求めた。
 
 | PWM duty | 移動距離 | 経過時間 | 平均速度 |
 | --- | --- | --- | --- |
@@ -150,31 +156,8 @@ sensor-echoのローカルREADMEにある走行測定から、距離を経過時
 | 75% | 0.75 m | 3.001 s | 0.2499 m/s |
 | 100% | 1.10 m | 3.001 s | 0.3665 m/s |
 
-CommanderとNav2の前後速度上限は、100%時の`1.10 / 3.001 ≈ 0.3665 m/s`にそろえる。
-これは直進時の車体速度を、左右輪共通の換算基準として使う近似。測定点の補間は行わない。
-25%時の0.0716 m/sは測った最小の点で、動き出す最低速度を測ったものではない。停止指令のため下限は0のままにする。
-角速度は今回測定していないため、既存の設定値を使う。
-
-車輪は両方とも正転のみで、後退・その場旋回はできない。
-経路追従にはRegulated Pure Pursuit（RPP）を使い、`allow_reversing: false`と`use_rotate_to_heading: false`を指定する。
-速度上限は実測値の0.3665 m/s。カーブ・障害物付近・ゴール手前では減速する。
-減速時の走行速度下限0.05 m/sは調整用の初期値で、実測の始動速度ではない。停止指令は0 m/sを使う。
-
-先読み距離は20cmで固定し、曲率計算には`use_fixed_curvature_lookahead: true`を使う。
-`interpolate_curvature_after_goal: true`で、ゴール付近でも曲率用の点を20cm先まで補う。
-Pure Pursuitの曲率は`2 * y / L²`なので、先読み距離`L = 0.2m`では旋回半径が0.1m以上になる。
-これは両輪を正転・停止に保つための幾何上の下限、車輪間隔0.13mの半分の0.065mより大きい。
-`regulated_linear_scaling_min_radius: 0.3`は半径30cm未満で減速を始める値で、旋回半径そのものの下限ではない。
-velocity_smootherは`scale_velocities: true`で前進と旋回の速度変化を同じ比率に抑える。
-角速度の負値は右旋回、加速度・減速度の負値は減速にも使うため残す。
-
-Governorが使う`NavigateToPose`だけを有効にし、Nav2同梱の`navigate_w_replanning_time.xml`を使う。
-1秒ごとに経路を再計算してRPPで追従する。独自のBT XMLは置かない。
-後退・その場旋回・costmapクリア・待機による回復処理は行わず、経路計算や追従に失敗したらゴールを失敗として返す。
-ゴールは位置の許容範囲0.25mで判定し、その場旋回による向き合わせは行わない。
-`dock_backwards: false`は維持するが、後退が必要な`UndockRobot`は使わない。
-Commanderの各車輪0〜100%制限も最終段に残す。
-経路探索は既存のNavfnを使う。旋回半径を考慮した経路生成や、真後ろの経路からの切り返しは扱わない。実機での走行は未確認。
+最大速度は`1.10 / 3.001 ≈ 0.3665m/s`を左右輪共通の換算基準として使う近似。
+測定点の補間は行わない。25%の値は始動速度の下限を測ったものではなく、停止指令には0を使う。
 
 `make run`の代わりに、C++アプリを直接起動して調査することもできる。
 この方法では、プロトコルのスキャン開始待ちにENTERを押す。
@@ -243,7 +226,6 @@ IMUの地面からの高さは`src/my_node/urdf/sample.urdf.xacro`の`imu_height
 筐体は車輪の上から全高までの箱で近似し、キャスター径とセンサーの外観寸法も表示用の仮値とする。
 IMU・LiDARの取り付け軸は`base_link`と同じ向きを仮定している。取り付け向きが異なる場合は実機に合わせて調整すること。
 質量・慣性とGazeboの制御プラグインは含めていないため、現状は表示とTF用のモデルになる。
-Nav2のglobal/local costmapの外形は車軸基準で前150mm・後50mm・左右90mmに合わせている。
 
 ## reference
 

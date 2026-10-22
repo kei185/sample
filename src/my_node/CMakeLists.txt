@@ -25,12 +25,15 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
-find_package(rclcpp_action REQUIRED)
-find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
 file(GLOB SRC src/*.cpp)
+# teleopでは自動探索のソースをビルドしない。
+list(REMOVE_ITEM SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/governor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/explorer.cpp
+)
 
 add_executable(my_node ${SRC} ${LIB})
 
@@ -49,8 +52,6 @@ target_link_libraries(
     sensor_msgs::sensor_msgs
     tf2::tf2
     tf2_ros::tf2_ros
-    rclcpp_action::rclcpp_action
-    nav2_msgs::nav2_msgs
     nav_msgs::nav_msgs
     geometry_msgs::geometry_msgs
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor-flow/install/lib/libsensor-flow.so

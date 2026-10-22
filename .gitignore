@@ -14,3 +14,5 @@ src/my_node/src/my-plot/.git
 /src/*
 !/src/my_node/
 !/src/my_visualization/
+
+memo
