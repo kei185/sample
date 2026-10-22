@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <sstream>
 #include <utility>
 
 namespace explorer
@@ -70,6 +71,61 @@ WFD::getNearestRepresentative(const geometry_msgs::msg::Pose& currentPose) const
                 }
         }
         return nearest;
+}
+
+// 失敗時だけ呼び、開始セルと周囲5×5マスを調べる。地図全体は走査しない。
+std::string WFD::describeStart(const geometry_msgs::msg::Pose& currentPose) const
+{
+        const auto& position = currentPose.position;
+        const auto& info     = grid.info;
+        const auto& origin   = info.origin;
+        std::ostringstream detail;
+        detail << "frame=" << grid.header.frame_id
+               << ", robot=(" << position.x << ", " << position.y << ", " << position.z << ")"
+               << ", grid=" << info.width << "x" << info.height
+               << ", resolution=" << info.resolution
+               << ", origin=(" << origin.position.x << ", " << origin.position.y << ", "
+               << origin.position.z << "), origin_q=(" << origin.orientation.x << ", "
+               << origin.orientation.y << ", " << origin.orientation.z << ", "
+               << origin.orientation.w << "), data_size=" << grid.data.size();
+
+        // INVALID_GRIDの場合も、無効な座標変換や配列アクセスをせずに診断情報を返す。
+        if (info.width == 0u || info.height == 0u ||
+            info.width > static_cast<unsigned>(std::numeric_limits<int>::max()) ||
+            info.height > static_cast<unsigned>(std::numeric_limits<int>::max()) ||
+            !std::isfinite(info.resolution) || info.resolution <= 0.0f ||
+            grid.data.size() != static_cast<size_t>(info.width) * info.height)
+                return detail.str() + ", cell=unavailable (invalid grid)";
+
+        const auto current = toCoordinate(position);
+        detail << ", cell=(" << current.x << ", " << current.y << ")";
+        if (!isInside(current))
+                return detail.str() + ", value=out_of_bounds";
+
+        const auto index = static_cast<size_t>(current.y) * info.width + current.x;
+        const int  value = grid.data[index];
+        detail << ", value=" << value << " ("
+               << (value == -1 ? "unknown" : value == 0 ? "free" : "occupied") << ")";
+
+        // 上の行ほどgridのyが大きく、各行はxの小さい順。中央が開始セル、outは地図の外。
+        detail << ", neighbors_5x5[y+2..y-2,x-2..x+2]=[";
+        for (int dy = 2; dy >= -2; --dy) {
+                if (dy != 2)
+                        detail << "; ";
+                for (int dx = -2; dx <= 2; ++dx) {
+                        if (dx != -2)
+                                detail << ",";
+                        const int64_t x = static_cast<int64_t>(current.x) + dx;
+                        const int64_t y = static_cast<int64_t>(current.y) + dy;
+                        if (x < 0 || y < 0 || x >= info.width || y >= info.height)
+                                detail << "out";
+                        else
+                                detail << static_cast<int>(
+                                        grid.data[static_cast<size_t>(y) * info.width + x]);
+                }
+        }
+        detail << "]";
+        return detail.str();
 }
 
 bool WFD::isInside(const Coordinate& coord) const

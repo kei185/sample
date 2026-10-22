@@ -92,9 +92,12 @@ void Governor::run(std::stop_token st)
                 this->grid.reset();
                 // 計算済みの地図を無効化して、次に届く地図を待つ。
                 if (!result) {
-                        RCLCPP_WARN(get_logger(),
-                                    "WFD failed: %s",
-                                    explorer::toString(result.error()));
+                        RCLCPP_WARN_THROTTLE(get_logger(),
+                                             *get_clock(),
+                                             5000,
+                                             "WFD failed: %s; %s",
+                                             explorer::toString(result.error()),
+                                             wfd.describeStart(this->pose.pose).c_str());
                         continue;
                 }
 

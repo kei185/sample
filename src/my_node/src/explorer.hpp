@@ -7,6 +7,7 @@
 #include <expected>
 #include <optional>
 #include <queue>
+#include <string>
 #include <vector>
 
 namespace explorer
@@ -47,6 +48,7 @@ class WFD
         // gridを所有する。std::moveで渡せばコピーせずに受け取れる。
         explicit WFD(nav_msgs::msg::OccupancyGrid grid);
         [[nodiscard]] std::expected<void, Error> run(const geometry_msgs::msg::Pose& currentPose);
+        std::string describeStart(const geometry_msgs::msg::Pose& currentPose) const;
         const std::vector<FrontierGroup>&        getFrontierGroups() const;
         std::optional<Coordinate>
         getNearestRepresentative(const geometry_msgs::msg::Pose& currentPose) const;
