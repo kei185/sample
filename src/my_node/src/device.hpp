@@ -21,6 +21,10 @@ constexpr char BASE_FRAME_ID[] = "base_link";
 constexpr char IMU_FRAME_ID[]   = "imu_link";
 constexpr char LIDAR_FRAME_ID[] = "lidar_link";
 
+// T-mini Plus仕様書2.1: 測距4000Hz。実機のスキャン設定6Hzに合わせる。
+constexpr double LIDAR_SAMPLE_RATE_HZ = 4000.0;
+constexpr double LIDAR_SCAN_RATE_HZ   = 6.0;
+
 constexpr float  LIDAR_RANGE_MIN_M   = 0.05f;
 constexpr float  LIDAR_RANGE_MAX_M   = 12.0f;
 constexpr double LIDAR_METERS_PER_MM = 1.0e-3;
