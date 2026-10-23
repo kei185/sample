@@ -15,6 +15,15 @@ constexpr double WHEEL_SEPARATION       = 0.13;
 constexpr double ENCODER_SAMPLE_RATE_HZ = 10.0;
 const double VELOCITY_PER_ROTATION = 2.0 * std::numbers::pi * WHEEL_RADIUS * ENCODER_SAMPLE_RATE_HZ;
 
+// EKFへ渡す測定分散の暫定値。実測したノイズ・横滑りに合わせて調整する。
+// 前進速度は標準偏差0.05m/s、横速度0の拘束は0.01m/s、旋回角速度は0.1rad/sとする。
+constexpr double ENCODER_LINEAR_VELOCITY_VARIANCE  = 0.05 * 0.05;
+constexpr double ENCODER_LATERAL_VELOCITY_VARIANCE = 0.01 * 0.01;
+constexpr double ENCODER_ANGULAR_VELOCITY_VARIANCE = 0.1 * 0.1;
+// ジャイロは標準偏差0.1rad/s、加速度は0.5m/s^2として、未校正の入力を過信しない。
+constexpr double IMU_ANGULAR_VELOCITY_VARIANCE    = 0.1 * 0.1;
+constexpr double IMU_LINEAR_ACCELERATION_VARIANCE = 0.5 * 0.5;
+
 constexpr char ODOM_FRAME_ID[] = "odom";
 constexpr char BASE_FRAME_ID[] = "base_link";
 

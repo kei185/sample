@@ -62,6 +62,10 @@ nav_msgs::msg::Odometry Encoder::transform(const frame::Encoder& encoder)
         msg.pose.pose.orientation.w = 1.0;
         msg.twist.twist.linear.x    = translation(leftVelocity, rightVelocity);
         msg.twist.twist.angular.z   = rotation(leftVelocity, rightVelocity, WHEEL_SEPARATION);
+        // EKFが融合する前進速度・横速度0・旋回角速度の分散を設定する。
+        msg.twist.covariance[0]  = ENCODER_LINEAR_VELOCITY_VARIANCE;
+        msg.twist.covariance[7]  = ENCODER_LATERAL_VELOCITY_VARIANCE;
+        msg.twist.covariance[35] = ENCODER_ANGULAR_VELOCITY_VARIANCE;
 
         return msg;
 }

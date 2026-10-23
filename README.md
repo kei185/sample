@@ -140,6 +140,11 @@ Commanderはnumericの`toVelocityRatio`で前進・旋回速度から左右の�
 左右それぞれの負値は0、上限超えは100%へ収め、NaN・無限大の場合は両輪0%を返す。
 
 EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
+エンコーダの前進速度・横速度0・旋回角速度に加え、IMUの加速度XYと角速度Zを融合する。
+`two_d_mode: true`を維持し、IMUの姿勢と加速度Zは融合しない。
+IMUは水平設置を前提にし、姿勢未提供のため重力除去は無効とする。傾くとXYへ重力が混ざる。
+入力の共分散は`device.hpp`の暫定値を使う。静止時の偏りと分散、走行時の横滑りに合わせた調整は未実施。
+
 SLAMは`scan`を購読し、`map`と`map -> odom`を配信する。
 `config/slam.yaml`はJazzyのSLAM標準設定を基に、試走時と同じ
 `restamp_tf: true`、`minimum_travel_distance: 0.1`、`minimum_travel_heading: 0.1`、
