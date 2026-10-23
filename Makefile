@@ -5,11 +5,9 @@ export FASTRTPS_DEFAULT_PROFILES_FILE ?= $(abspath src/my_node/config/fastdds.xm
 .PHONY: build visual init clean run stack teleop display preview model nodes topics imu scan odom ekf map tf
 
 init:
-	colcon build --symlink-install --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
 	cd src/my_node/src/sensor-flow
-	git checkout main
-	git pull
 	make release
+	colcon build --symlink-install --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
 
 build:
 	colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
