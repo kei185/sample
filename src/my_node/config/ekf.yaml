@@ -53,21 +53,19 @@ ekf_filter_node:
             ]
 
         imu0: imu
+        # 平面走行ではIMUの加速度XYと旋回角速度Zを使う。位置・姿勢は入力されない。
         imu0_config:
             [
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                true,
-                false,
-                false,
-                false,
+                # x, y, z
+                false, false, false,
+                # roll, pitch, yaw
+                false, false, false,
+                # vx, vy, vz
+                false, false, false,
+                # vroll, vpitch, vyaw
+                false, false, true,
+                # ax, ay, az
+                true, true, false,
             ]
+        # IMUは姿勢未提供のため、水平設置を前提にXYだけを使う。Zの重力は融合しない。
+        imu0_remove_gravitational_acceleration: false

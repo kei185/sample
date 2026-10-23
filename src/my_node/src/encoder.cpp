@@ -27,8 +27,10 @@ void Encoder::run(std::stop_token st)
         uint64_t published = 0u;
         while (this->parsedQueue.waitData(st)) {
                 auto data = this->parsedQueue.pop();
-                auto msg  = transform(data);
-                this->publisher->publish(msg);
+                auto msg  = this->transform(data);
+                if (!msg)
+                        continue;
+                this->publisher->publish(*msg);
                 ++published;
                 RCLCPP_INFO_THROTTLE(this->get_logger(),
                                      *this->get_clock(),
@@ -36,20 +38,37 @@ void Encoder::run(std::stop_token st)
                                      "odom published: count=%llu, stamp=%d.%09u, "
                                      "linear.x=%.3f m/s, angular.z=%.3f rad/s",
                                      static_cast<unsigned long long>(published),
-                                     msg.header.stamp.sec,
-                                     msg.header.stamp.nanosec,
-                                     msg.twist.twist.linear.x,
-                                     msg.twist.twist.angular.z);
+                                     msg->header.stamp.sec,
+                                     msg->header.stamp.nanosec,
+                                     msg->twist.twist.linear.x,
+                                     msg->twist.twist.angular.z);
         }
 }
 
-nav_msgs::msg::Odometry Encoder::transform(const frame::Encoder& encoder)
+std::optional<nav_msgs::msg::Odometry> Encoder::transform(const frame::Encoder& encoder)
 {
         using namespace device;
-        // 入力は0.1秒間の回転量。車輪の円周と採取周波数を掛けてm/sへ直す。
-        // 負の回転量は後退として、そのまま符号を残す。
-        const double leftVelocity  = encoder.left * VELOCITY_PER_ROTATION;
-        const double rightVelocity = encoder.right * VELOCITY_PER_ROTATION;
+
+        // 初回は時刻の基準だけ保存する。時刻が逆行した場合も基準を取り直す。
+        const auto previousTimestamp = this->previousTimestamp;
+        this->previousTimestamp = encoder.timestamp;
+        if (!previousTimestamp)
+                return std::nullopt;
+        if (encoder.timestamp <= *previousTimestamp) {
+                RCLCPP_WARN(this->get_logger(),
+                            "Encoder timestamp did not advance: previous=%llu ms, current=%llu ms; "
+                            "skipping sample and resetting time baseline",
+                            static_cast<unsigned long long>(*previousTimestamp),
+                            static_cast<unsigned long long>(encoder.timestamp));
+                return std::nullopt;
+        }
+
+        // timestampはms。今回の回転量を実際の経過秒で割り、左右の回転速度（rev/s）を求める。
+        const double elapsedSeconds = (encoder.timestamp - *previousTimestamp) / 1000.0;
+        const double leftRotationSpeed = encoder.left / elapsedSeconds;
+        const double rightRotationSpeed = encoder.right / elapsedSeconds;
+        const double leftVelocity = leftRotationSpeed * WHEEL_CIRCUMFERENCE;
+        const double rightVelocity = rightRotationSpeed * WHEEL_CIRCUMFERENCE;
 
         auto msg = nav_msgs::msg::Odometry();
 
@@ -62,6 +81,10 @@ nav_msgs::msg::Odometry Encoder::transform(const frame::Encoder& encoder)
         msg.pose.pose.orientation.w = 1.0;
         msg.twist.twist.linear.x    = translation(leftVelocity, rightVelocity);
         msg.twist.twist.angular.z   = rotation(leftVelocity, rightVelocity, WHEEL_SEPARATION);
+        // EKFが融合する前進速度・横速度0・旋回角速度の分散を設定する。
+        msg.twist.covariance[0]  = ENCODER_LINEAR_VELOCITY_VARIANCE;
+        msg.twist.covariance[7]  = ENCODER_LATERAL_VELOCITY_VARIANCE;
+        msg.twist.covariance[35] = ENCODER_ANGULAR_VELOCITY_VARIANCE;
 
         return msg;
 }

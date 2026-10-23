@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
+
 #include <rclcpp/node.hpp>
 #include <rclcpp/publisher.hpp>
 #include <rclcpp/timer.hpp>
@@ -22,8 +25,11 @@ struct Encoder : public processor::Processor, public rclcpp::Node
         // queueの所有者は、ノードより長く生存すること。
         explicit Encoder(xqueue::Queue<frame::Encoder>& parsedQueue);
 
-        void                    run(std::stop_token) override;
-        nav_msgs::msg::Odometry transform(const frame::Encoder&);
+        void                                         run(std::stop_token) override;
+        std::optional<nav_msgs::msg::Odometry> transform(const frame::Encoder&);
+
+      private:
+        std::optional<uint64_t> previousTimestamp;
 };
 
 } // namespace encoder
