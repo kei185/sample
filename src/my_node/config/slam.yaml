@@ -19,6 +19,7 @@ slam_toolbox:
     transform_publish_period: 0.02
     map_update_interval: 5.0
     resolution: 0.05
+    # 標準値falseから上書き。map -> odomの時刻を配信時刻基準にして、全周スキャンの収集遅延によるTF不足を避ける。
     restamp_tf: true
     min_laser_range: 0.0
     max_laser_range: 20.0
@@ -29,8 +30,11 @@ slam_toolbox:
     enable_interactive_mode: true
     use_scan_matching: true
     use_scan_barycenter: true
+    # 標準値0.5mから上書き。10cmの移動でも次のスキャンを処理対象にする。
     minimum_travel_distance: 0.1
+    # 標準値0.5radから上書き。約5.7度の旋回でも次のスキャンを処理対象にする。
     minimum_travel_heading: 0.1
+    # 標準値falseから上書き。移動距離と回転角を判定し、どちらかが閾値に達すれば処理対象にする。
     check_min_dist_and_heading_precisely: true
     scan_buffer_size: 10
     scan_buffer_maximum_scan_distance: 10.0
