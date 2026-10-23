@@ -12,8 +12,7 @@ constexpr double MAX_VELOCITY = 0.3665;
 constexpr double WHEEL_RADIUS = 0.021;
 constexpr double WHEEL_SEPARATION       = 0.13;
 // DEVICE.mdの車輪径42mm・左右中心間130mmをmへ変換する。
-constexpr double ENCODER_SAMPLE_RATE_HZ = 10.0;
-const double VELOCITY_PER_ROTATION = 2.0 * std::numbers::pi * WHEEL_RADIUS * ENCODER_SAMPLE_RATE_HZ;
+constexpr double WHEEL_CIRCUMFERENCE = 2.0 * std::numbers::pi * WHEEL_RADIUS;
 
 // EKFへ渡す測定分散の暫定値。実測したノイズ・横滑りに合わせて調整する。
 // 前進速度は標準偏差0.05m/s、横速度0の拘束は0.01m/s、旋回角速度は0.1rad/sとする。

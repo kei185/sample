@@ -6,7 +6,10 @@ export FASTRTPS_DEFAULT_PROFILES_FILE ?= $(abspath src/my_node/config/fastdds.xm
 
 init:
 	colcon build --symlink-install --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
-
+	cd src/my_node/src/sensor-flow
+	git checkout main
+	git pull
+	make release
 
 build:
 	colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16

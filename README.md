@@ -139,6 +139,14 @@ make teleop
 Commanderはnumericの`toVelocityRatio`で前進・旋回速度から左右の速度比を求める。
 左右それぞれの負値は0、上限超えは100%へ収め、NaN・無限大の場合は両輪0%を返す。
 
+エンコーダフレームは左右それぞれsigned 32bitの生カウントを計8バイトで送る。
+`sensor-flow`のparserが2800で割り、左右の回転量を`double`で保持する。
+`my_node`のEncoderは前回のtimestampを保持し、今回との差を秒へ直す。
+左右の回転量をこの経過秒で割って回転速度（rev/s）を求め、車輪の円周を掛けてm/sへ換算する。
+初回は時刻だけを記録して配信せず、timestampが同値または逆行したサンプルも警告して除外する。
+逆行後はその時刻を新しい基準にする。連続するフレーム間の経過時間を使うため、欠落したフレームの回転量は復元できない。
+従来のQ6回転量とは単位が異なるため、sensor-echoとsensor-flowも合わせて更新する。
+
 EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
 エンコーダの前進速度・横速度0・旋回角速度に加え、IMUの加速度XYと角速度Zを融合する。
 `two_d_mode: true`を維持し、IMUの姿勢と加速度Zは融合しない。
