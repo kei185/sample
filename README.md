@@ -1,6 +1,14 @@
-# sample
+# 探査機 毛玉 Probe KEDAMA
 
-ROS 2 nodes for the sensor-echo robot.
+LiDAR: YDLIDAR T-mini Plus  
+IMU: STMicroelectronics LSM6DSV16X  
+Motor: DFRobot FIT0483  
+Motor DriverTexas Instruments DRV8835  
+MCU: STM32 NUCLEO-F446RE  
+Computing: Raspberry Pi 5 8Gb RAM, 128Gb Storage
+
+Including a submodule [sensor-flow](https://github.com/kei185/sensor-flow) at my_node/src/sensor-flow  
+Supposed [sensor-echo](https://github.com/kei185/sensor-echo) to be run on the above MCU
 
 `my_node` runs the sensor publishers, Commander, and Governor in one process.
 `my_visualization` launches `rviz2` on the visualization PC.
