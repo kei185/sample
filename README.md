@@ -1,251 +1,51 @@
 # sample
 
-## 実機と可視化の分担
+ROS 2 nodes for the sensor-echo robot.
 
-| マシン | パッケージ | 起動するもの |
-| --- | --- | --- |
-| 実機PC | `my_node`（`make run`） | シリアル入出力、センサー配信、Commander、Governor |
-| 実機PC | `my_node`（`make stack`） | モデル・TF配信、EKF、SLAM、Nav2 |
-| 可視化PC | `my_visualization` | RVizによるモデル・地図・LiDAR・推定軌跡の表示 |
+`my_node` runs the sensor publishers, Commander, and Governor in one process.
+`my_visualization` launches `rviz2` on the visualization PC.
+Topic names below use the default launch files without a namespace.
 
-実機PCが`robot_description`、`tf`、`tf_static`、`map`、`scan`、`odometry/filtered`を配信する。
-可視化PCはそれらを購読する。モデルの読み込みとTF配信も実機側で行うので、RVizを止めても実機側の処理は継続する。
-可視化パッケージは実機パッケージ、sensor-flow、C++コンパイラに依存しない。
+## Nodes
 
-両PCでROS Jazzyを使い、同じLANから通信できるようにする。時計も同期する。
-ROSを実行する端末では両PCのドメインを0にそろえる。
+| Node        | Package   | Role                                       |
+| ----------- | --------- | ------------------------------------------ |
+| `lidar`     | `my_node` | Publish LiDAR scans                        |
+| `imu`       | `my_node` | Publish angular velocity and acceleration  |
+| `encoder`   | `my_node` | Publish wheel-based body velocity          |
+| `commander` | `my_node` | Convert velocity commands to motor PWM     |
+| `governor`  | `my_node` | Find frontier goals and request navigation |
 
-```bash
-source /opt/ros/jazzy/setup.bash
-export ROS_DOMAIN_ID=0
-```
+## Published Topics
 
-実機側のLinux Dockerは`network_mode: host`を使い、FastDDSを次の設定で起動する。
+| Node      | Topic   | Type                        | Description                                                          |
+| --------- | ------- | --------------------------- | -------------------------------------------------------------------- |
+| `lidar`   | `/scan` | `sensor_msgs/msg/LaserScan` | LiDAR ranges                                                         |
+| `imu`     | `/imu`  | `sensor_msgs/msg/Imu`       | Angular velocity and linear acceleration; orientation is unavailable |
+| `encoder` | `/odom` | `nav_msgs/msg/Odometry`     | Body velocity from wheel encoders; pose is not integrated            |
 
-```bash
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
-export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds.xml
-```
+Sensor input comes from sensor-flow queues populated from the MCU serial link.
 
-`Lidar-SLAM/env/fastdds.xml`をコンテナの`/etc/fastdds.xml`へ置く。
-`Dockerfile`と`Dockerfile_release`でビルドするイメージには、このファイルと環境変数を含めている。
-UDPの最大サイズを1400バイトに制限し、大きなメッセージはDDS側で分割する。
-IPフラグメントが途中で失われると、ノードとTFは見えても`robot_description`本文が届かない場合がある。
+## Subscribed Topics
 
-可視化側のmacOS＋OrbStackでは、Linux VMとLANの間にNATがある。
-`Lidar-SLAM/env/docker-compose.yml`はbridge接続でDDSのUDPポート`7410–7511`を同じ番号で公開する。
-これは`ROS_DOMAIN_ID=0`、CycloneDDSの参加者インデックス0〜50に対応する。ドメインを変える場合は公開ポートも変更する。
-`env/cyclonedds.xml`で探索先と、返答先として通知するMacのLAN側IPを指定する。
-こちらもUDPを1400バイト以下に分割する。
+| Node                     | Topic        | Type                         | Publisher package                                             | Description                                   |
+| ------------------------ | ------------ | ---------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
+| `commander`              | `/cmd_vel`   | `geometry_msgs/msg/Twist`    | `nav2_collision_monitor`                                      | Forward velocity and yaw rate                 |
+| `governor`               | `/map`       | `nav_msgs/msg/OccupancyGrid` | `slam_toolbox`                                                | Map used for frontier detection               |
+| `governor` (TF listener) | `/tf`        | `tf2_msgs/msg/TFMessage`     | `robot_localization`, `slam_toolbox`, `robot_state_publisher` | Dynamic transforms for the current robot pose |
+| `governor` (TF listener) | `/tf_static` | `tf2_msgs/msg/TFMessage`     | `robot_state_publisher`                                       | Fixed model transforms                        |
 
-`Lidar-SLAM/env/.env`にはMac本体とRasPi本体のLAN側IPを設定する。コンテナのIPは使わない。
+The `/cmd_vel` publisher above is the final stage of the default Nav2 command path.
+Commander sends the resulting PWM values through the serial command queue.
 
-```dotenv
-ROS_LOCAL_IP=192.168.0.10
-ROS_PEER_IP=192.168.0.6
-```
+## Actions
 
-可視化側はcomposeの`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`と`ROS_AUTOMATIC_DISCOVERY_RANGE=SYSTEM_DEFAULT`を使い、
-`CYCLONEDDS_URI=file:///etc/cyclonedds.xml`でXMLのユニキャスト設定を読み込む。
-OrbStackの「Expose ports to LAN」を有効にする。端末から探索範囲を`LOCALHOST`や`SUBNET`へ上書きしない。
-IPが変わった場合は`.env`も更新する。各PCの設定はlaunchから書き換えない。
-noVNCは`6080:6080`で公開し、`http://localhost:6080/vnc.html`で開く。
-通信設定はノードの起動時に読み込まれるため、変更後はROSノードを起動し直す。OSの再起動は不要。
+| Client node | Action              | Type                              | Server package      | Description                 |
+| ----------- | ------------------- | --------------------------------- | ------------------- | --------------------------- |
+| `governor`  | `/navigate_to_pose` | `nav2_msgs/action/NavigateToPose` | `nav2_bt_navigator` | Navigate to a frontier goal |
 
-## Makefileからの起動・疎通確認
+## References
 
-ROS環境とビルド済みワークスペースの`install/setup.bash`を読み込んだ端末で実行する。
-`ROS_DOMAIN_ID`は両PCで0にそろえ、探索設定は上記の各環境に合わせる。
-`make nodes`と`make topics`は探索を10秒待ってから一覧を表示する。
-
-| コマンド | 内容 |
-| --- | --- |
-| `make build` | `my_node`だけビルド |
-| `make visual` | `my_visualization`だけビルド |
-| `make init` | `my_node`だけsymlink-installでビルド |
-| `make run` | `my_node`本体を起動 |
-| `make stack` | モデル・TF配信、EKF、SLAM、Nav2を起動 |
-| `make display` | 可視化PCでRVizを起動 |
-| `make preview` | 可視化PCでモデル確認用のRVizを起動 |
-| `make model` | モデル・TF配信だけ起動 |
-| `make nodes` | 見えているノードを一覧表示 |
-| `make topics` | 見えているトピックと型を一覧表示 |
-| `make imu` / `make scan` / `make odom` | IMU・LiDAR・エンコーダの生Odometryを1件受信 |
-| `make ekf` | EKFのOdometryを1件受信 |
-| `make map` | 地図の寸法・解像度などを1件受信 |
-| `make tf` | `map -> base_link`の現在位置を継続表示 |
-
-センサー・地図の確認は受信すると終了する。受信待ちやTF表示を止める場合はCtrl+C。
-モデルだけを見る場合は実機側で`make model`、可視化側で`make preview`を使う。
-
-## 実機PCでの起動
-
-既存のsensor-flowライブラリをビルド・インストールした状態で、実機パッケージだけをビルドする。
-
-```bash
-rosdep install --from-paths src/my_node --ignore-src -r -y
-make build
-source install/setup.bash
-make stack
-```
-
-`make stack`はモデル・TF配信、EKF、SLAM、Nav2を起動する。
-別の端末で同じROS環境とワークスペースを読み込み、C++アプリを起動する。
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-make run
-```
-
-`make run`は`my_node.launch.py`でC++アプリだけを起動し、`make stack`は`stack.launch.py`を起動する。
-起動した端末ごとにCtrl+Cで停止する。`my_node`を終了・再起動しても、別端末のモデル・EKF・SLAM・Nav2は継続する。
-`make model`はモデル配信だけを確認するときに使い、`make stack`に含まれるモデル配信と同時には起動しない。
-
-シリアル接続先の既定値は`/dev/ttyACM0`。変更する場合は次のように直接launchする。
-
-```bash
-ros2 launch my_node my_node.launch.py serial_device:=/dev/ttyACM1
-```
-
-既存プロトコルのENTER待ちには`my_node.launch.py`が改行を送り、ハンドシェイクと時刻同期の後に自動でスキャンを開始する。
-CommanderとGovernorのスレッドは引き続きC++アプリ内で管理する。
-
-EKFは`odom`と`imu`を購読し、`odometry/filtered`と`odom -> base_link`を配信する。
-SLAMは`scan`を購読し、`map`と`map -> odom`を配信する。
-Nav2は`navigation_launch.py`から起動するため、AMCLと地図サーバーは起動せず、SLAMの地図とTFを使う。
-Nav2の設定は`config/nav2_params.yaml`を使い、`ros2 launch my_node stack.launch.py nav2_params_file:=/path/to/params.yaml`で変更できる。
-
-速度指令の経路は次のようになる。指令の型はCommanderに合わせて`geometry_msgs/msg/Twist`を使う。
-
-```text
-Nav2 controller -> cmd_vel_nav -> velocity_smoother
-    -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> Commander
-```
-
-Nav2のOdometry入力は`odometry/filtered`へ合わせる。
-Commander::transformはnumericのtoVelocityRatioで前進・旋回速度から左右の速度比を求め、0〜100%のPWM指令へ変換する。
-左右それぞれの負値は0、上限超えは100%へ収め、NaN・無限大の場合は両輪0%を返す。
-異常値はERROR、範囲外を収めた場合はWARNで、入力・速度上下限・車輪間隔・左右の比率・実際のPWM出力を記録する。
-速度比とPWMの関係は線形と仮定し、最大速度には以下の実測値を使う。
-
-速度に関係する設定値は次のとおり。Commanderはdevice.hppを参照し、Nav2はnav2_params.yamlを参照する。
-
-| 設定箇所 | 対象 | 下限 | 上限 | 単位 |
-| --- | --- | --- | --- | --- |
-| device.hppのMIN/MAX_VELOCITY | Commanderが換算する片輪の速度 | 0.0 | 0.3665 | m/s |
-| FollowPath.desired_linear_vel | RPPの前進速度 | 0.0 | 0.3665 | m/s |
-| velocity_smoother.min/max_velocityのx | 平滑化後の前後速度 | 0.0 | 0.3665 | m/s |
-| velocity_smoother.min/max_velocityのy | 平滑化後の横速度 | 0.0 | 0.0 | m/s |
-| velocity_smoother.min/max_velocityのz | 平滑化後の旋回角速度 | -2.0 | 2.0 | rad/s |
-| docking_server.controller.v_linear_min / v_linear_max | ドッキングの前後速度 | 0.15 | 0.15 | m/s |
-
-sensor-echoのローカルREADMEにある走行測定から、距離を経過時間で割って速度を求めた。
-
-| PWM duty | 移動距離 | 経過時間 | 平均速度 |
-| --- | --- | --- | --- |
-| 25% | 0.215 m | 3.001 s | 0.0716 m/s |
-| 50% | 0.51 m | 3.001 s | 0.1699 m/s |
-| 75% | 0.75 m | 3.001 s | 0.2499 m/s |
-| 100% | 1.10 m | 3.001 s | 0.3665 m/s |
-
-CommanderとNav2の前後速度上限は、100%時の`1.10 / 3.001 ≈ 0.3665 m/s`にそろえる。
-これは直進時の車体速度を、左右輪共通の換算基準として使う近似。測定点の補間は行わない。
-25%時の0.0716 m/sは測った最小の点で、動き出す最低速度を測ったものではない。停止指令のため下限は0のままにする。
-角速度は今回測定していないため、既存の設定値を使う。
-
-車輪は両方とも正転のみで、後退・その場旋回はできない。
-経路追従にはRegulated Pure Pursuit（RPP）を使い、`allow_reversing: false`と`use_rotate_to_heading: false`を指定する。
-速度上限は実測値の0.3665 m/s。カーブ・障害物付近・ゴール手前では減速する。
-減速時の走行速度下限0.05 m/sは調整用の初期値で、実測の始動速度ではない。停止指令は0 m/sを使う。
-
-先読み距離は20cmで固定し、曲率計算には`use_fixed_curvature_lookahead: true`を使う。
-`interpolate_curvature_after_goal: true`で、ゴール付近でも曲率用の点を20cm先まで補う。
-Pure Pursuitの曲率は`2 * y / L²`なので、先読み距離`L = 0.2m`では旋回半径が0.1m以上になる。
-これは両輪を正転・停止に保つための幾何上の下限、車輪間隔0.13mの半分の0.065mより大きい。
-`regulated_linear_scaling_min_radius: 0.3`は半径30cm未満で減速を始める値で、旋回半径そのものの下限ではない。
-velocity_smootherは`scale_velocities: true`で前進と旋回の速度変化を同じ比率に抑える。
-角速度の負値は右旋回、加速度・減速度の負値は減速にも使うため残す。
-
-Governorが使う`NavigateToPose`だけを有効にし、Nav2同梱の`navigate_w_replanning_time.xml`を使う。
-1秒ごとに経路を再計算してRPPで追従する。独自のBT XMLは置かない。
-後退・その場旋回・costmapクリア・待機による回復処理は行わず、経路計算や追従に失敗したらゴールを失敗として返す。
-ゴールは位置の許容範囲0.25mで判定し、その場旋回による向き合わせは行わない。
-`dock_backwards: false`は維持するが、後退が必要な`UndockRobot`は使わない。
-Commanderの各車輪0〜100%制限も最終段に残す。
-経路探索は既存のNavfnを使う。旋回半径を考慮した経路生成や、真後ろの経路からの切り返しは扱わない。実機での走行は未確認。
-
-`make run`の代わりに、C++アプリを直接起動して調査することもできる。
-この方法では、プロトコルのスキャン開始待ちにENTERを押す。
-
-```bash
-ros2 run my_node my_node /dev/ttyACM0
-```
-
-## 可視化PCでの起動
-
-可視化パッケージだけ依存を導入してビルドする。実機用のコンパイラ指定とsensor-flowのビルドは不要。
-
-```bash
-rosdep install --from-paths src/my_visualization --ignore-src -r -y
-make visual
-source install/setup.bash
-ros2 launch my_visualization visualization.launch.py
-```
-
-RVizの基準座標は`map`で、地図・モデル・TF・LiDAR・EKFのOdometryを表示する。
-`robot_description`と`map`はTransient Local、`scan`はBest Effortで購読する。
-カスタムRViz設定は`rviz_config:=/path/to/config.rviz`で指定できる。
-
-地図を作らずモデルだけ確認する場合は、実機PCで次を起動する。
-
-```bash
-ros2 launch my_node description.launch.py
-```
-
-可視化PCでは地図を必要としない座標を指定する。
-
-```bash
-ros2 launch my_visualization visualization.launch.py fixed_frame:=base_footprint
-```
-
-可視化PCで`ros2 topic list`に実機のトピックが出ない場合は、ドメイン・探索範囲・ネットワークを確認する。
-ROS CLIのdaemonを起動済みの端末で通信設定を変えた場合は、`ros2 daemon stop`の後で再確認する。
-
-## ロボットモデル
-
-Nav2公式チュートリアルの[sam_bot_description](https://github.com/ros-navigation/navigation2_tutorials/blob/f3bd892a60d3fb91560ecb726bf922eb9bcbc858/sam_bot_description/src/description/sam_bot_description.urdf)を元に、
-[DEVICE.md](DEVICE.md)の寸法へ変更したURDF/Xacroを`src/my_node/urdf/sample.urdf.xacro`に置く。
-出典・変更内容・Apache 2.0のライセンスは同じディレクトリの`NOTICE.md`と`LICENSE`に記載している。
-
-- 全長200mm、全幅180mm、全高220mm。`DEVICE.md`の`22ch`は22cmとして扱う。
-- 車輪は直径42mm・幅19mm、左右の中心間距離は130mm。
-- `base_link`は左右車軸の中点。前方が+x、左が+y、上が+z。
-- 車軸は後端から50mm、キャスターは後端から150mm。
-- LiDARは左右中央・後端から140mm・地面から200mm。
-- IMUは左右中央・後端から100mm・地面から165mm。
-
-モデルのTFは次の配置になる。単位はm。
-
-| 親 | 子 | x | y | z |
-| --- | --- | --- | --- | --- |
-| base_link | base_footprint | 0 | 0 | -0.021 |
-| base_link | drivewhl_l_link | 0 | 0.065 | 0 |
-| base_link | drivewhl_r_link | 0 | -0.065 | 0 |
-| base_link | front_caster | 0.10 | 0 | -0.011 |
-| base_link | imu_link | 0.05 | 0 | 0.144 |
-| base_link | lidar_link | 0.09 | 0 | 0.179 |
-
-IMUの地面からの高さは`src/my_node/urdf/sample.urdf.xacro`の`imu_height`で設定する。既定値は0.165m。
-`base_link -> imu_link`のzは`imu_height - 0.021`になる。
-車輪角度の配信は未実装のため、joint_state_publisherが角度0を配信し、モデル上の車輪は回転しない。
-筐体は車輪の上から全高までの箱で近似し、キャスター径とセンサーの外観寸法も表示用の仮値とする。
-IMU・LiDARの取り付け軸は`base_link`と同じ向きを仮定している。取り付け向きが異なる場合は実機に合わせて調整すること。
-質量・慣性とGazeboの制御プラグインは含めていないため、現状は表示とTF用のモデルになる。
-Nav2のglobal/local costmapの外形は車軸基準で前150mm・後50mm・左右90mmに合わせている。
-
-## reference
-
-- https://arxiv.org/pdf/1806.03581
-- https://github.com/ros2/ros2_documentation/blob/jazzy/source/Tutorials/Advanced/Improved-Dynamic-Discovery.rst
+- [Frontier Based Exploration for Autonomous Robot](https://arxiv.org/pdf/1806.03581)
+- [Slam Toolbox](https://github.com/SteveMacenski/slam_toolbox/blob/jazzy/README.md)
+- [ROS2 Navigation2 Action Clientを使用してゴールを送信する](https://qiita.com/porizou1/items/cb9382bb2955c144d168)
