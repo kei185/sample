@@ -1,8 +1,14 @@
-.PHONY: build visual init clean run stack display preview model nodes topics imu scan odom ekf map tf
+# センサー・モデル・地図・teleopで共通のDDS設定を使う。既存の環境変数を優先する。
+export RMW_IMPLEMENTATION ?= rmw_fastrtps_cpp
+export FASTRTPS_DEFAULT_PROFILES_FILE ?= $(abspath src/my_node/config/fastdds.xml)
+
+.PHONY: build visual init clean run stack teleop display preview model nodes topics imu scan odom ekf map tf
 
 init:
+	cd src/my_node/src/sensor-flow
+	make release
+	cd ../../../../
 	colcon build --symlink-install --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
-
 
 build:
 	colcon build --packages-select my_node --cmake-args -DCMAKE_CXX_COMPILER=/usr/bin/g++-16
@@ -18,6 +24,9 @@ run:
 
 stack:
 	ros2 launch my_node stack.launch.py
+
+teleop:
+	ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p speed:=0.15 -p turn:=0.8
 
 display:
 	ros2 launch my_visualization visualization.launch.py

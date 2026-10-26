@@ -14,16 +14,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false"),
-        DeclareLaunchArgument(
-            "nav2_params_file",
-            default_value=os.path.join(pkg_share, "config", "nav2_params.yaml"),
-        ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "description.launch.py")
-            ),
-            launch_arguments={"use_sim_time": use_sim_time}.items(),
-        ),
         Node(
             package="robot_localization",
             executable="ekf_node",
@@ -43,18 +33,7 @@ def generate_launch_description():
                 "use_sim_time": use_sim_time,
                 "autostart": "true",
                 "use_lifecycle_manager": "false",
-            }.items(),
-        ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(
-                get_package_share_directory("nav2_bringup"),
-                "launch", "navigation_launch.py",
-            )),
-            launch_arguments={
-                "params_file": LaunchConfiguration("nav2_params_file"),
-                "use_sim_time": use_sim_time,
-                "autostart": "true",
-                "use_composition": "False",
+                "slam_params_file": os.path.join(pkg_share, "config", "slam.yaml"),
             }.items(),
         ),
     ])

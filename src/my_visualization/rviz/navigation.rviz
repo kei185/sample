@@ -33,6 +33,9 @@ Visualization Manager:
     - Class: rviz_default_plugins/Odometry
       Name: Odometry
       Enabled: true
+      # 共分散の大きな面や円錐が地図を覆わないよう、通常表示では無効にする。
+      Covariance:
+        Value: false
       Topic:
         Value: /odometry/filtered
         Durability Policy: Volatile

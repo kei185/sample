@@ -53,6 +53,12 @@ sensor_msgs::msg::Imu Imu::transform(const frame::Imu& imu)
         msg.header.stamp.nanosec = static_cast<uint32_t>((imu.timestamp % 1000) * 1'000'000);
         msg.header.frame_id      = device::IMU_FRAME_ID;
 
+        // 姿勢は未提供。角速度と加速度には、各軸の測定分散を設定する。
+        for (const auto index : {0, 4, 8}) {
+                msg.angular_velocity_covariance[index] = device::IMU_ANGULAR_VELOCITY_VARIANCE;
+                msg.linear_acceleration_covariance[index] =
+                        device::IMU_LINEAR_ACCELERATION_VARIANCE;
+        }
         msg.orientation_covariance[0] = -1.0;
         msg.angular_velocity.x        = imu.rot.x * device::IMU_ANGULAR_VELOCITY_RADPS_PER_LSB;
         msg.angular_velocity.y        = imu.rot.y * device::IMU_ANGULAR_VELOCITY_RADPS_PER_LSB;
