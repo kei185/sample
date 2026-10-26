@@ -1,4 +1,5 @@
 # 探査機 毛玉 Probe KEDAMA
+simple 2D SLAM differential drive robot
 
 LiDAR: YDLIDAR T-mini Plus  
 IMU: STMicroelectronics LSM6DSV16X  
